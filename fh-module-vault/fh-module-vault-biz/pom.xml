@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.familyhome</groupId>
+    <artifactId>fh-module-vault</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fh-module-vault-biz</artifactId>
+  <name>fh-module-vault-biz</name>
+  <description>
+    账号本域实现：跨平台账号密码的增删改查 + AES-256-GCM 加解密。
+    刻意**不依赖 fh-module-file-api**——本域只存文本，没有任何文件，
+    少一条跨域依赖就把"账号本先拆出去"这条路铺平了。
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-module-vault-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+    </dependency>
+  </dependencies>
+</project>

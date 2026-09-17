@@ -1,0 +1,141 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>3.5.16</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.familyhome</groupId>
+  <artifactId>family-home-server</artifactId>
+  <version>1.0.0-SNAPSHOT</version>
+  <packaging>pom</packaging>
+
+  <name>family-home-server</name>
+  <description>家庭 Home 服务端（相册 + 菜谱 + 账号本）。单体多模块，按业务域拆分，为未来系统拆分预留边界。</description>
+
+  <!--
+    模块依赖方向（只能从上往下，详见 plans/家庭home-一期方案.md §3）：
+      fh-boot  ->  {file,album,recipe,vault}-biz
+      *-biz    ->  自己的 *-api  +  file-api（跨域只允许依赖对方 -api）
+      *-api    ->  fh-common
+    禁止：*-biz 依赖其他域的 *-biz；禁止跨域 SQL join。
+
+    vault（账号本）域是 v5 新增的第四个域，也是唯一**不依赖 file-api** 的域——它只存文本，没有文件。
+  -->
+  <modules>
+    <module>fh-common</module>
+    <module>fh-module-file</module>
+    <module>fh-module-album</module>
+    <module>fh-module-recipe</module>
+    <module>fh-module-vault</module>
+    <module>fh-boot</module>
+  </modules>
+
+  <properties>
+    <java.version>21</java.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+    <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
+    <mybatis-plus.version>3.5.17</mybatis-plus.version>
+  </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <!-- ===== 内部模块 ===== -->
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-common</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-file-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-file-biz</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-album-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-album-biz</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-recipe-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-recipe-biz</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-vault-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-vault-biz</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+
+      <!-- ===== 三方 ===== -->
+      <dependency>
+        <groupId>com.baomidou</groupId>
+        <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+        <version>${mybatis-plus.version}</version>
+      </dependency>
+      <!-- 3.5.9 起 JSqlParser 被拆出，分页插件必须显式引入 -->
+      <dependency>
+        <groupId>com.baomidou</groupId>
+        <artifactId>mybatis-plus-jsqlparser</artifactId>
+        <version>${mybatis-plus.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
+
+  <dependencies>
+    <!-- 全部模块共用 -->
+    <dependency>
+      <groupId>org.projectlombok</groupId>
+      <artifactId>lombok</artifactId>
+      <scope>provided</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <pluginManagement>
+      <plugins>
+        <plugin>
+          <groupId>org.apache.maven.plugins</groupId>
+          <artifactId>maven-compiler-plugin</artifactId>
+          <configuration>
+            <release>${java.version}</release>
+            <parameters>true</parameters>
+            <annotationProcessorPaths>
+              <path>
+                <groupId>org.projectlombok</groupId>
+                <artifactId>lombok</artifactId>
+                <version>${lombok.version}</version>
+              </path>
+            </annotationProcessorPaths>
+          </configuration>
+        </plugin>
+      </plugins>
+    </pluginManagement>
+  </build>
+</project>

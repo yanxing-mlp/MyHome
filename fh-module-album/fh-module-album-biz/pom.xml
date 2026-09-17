@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.familyhome</groupId>
+    <artifactId>fh-module-album</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fh-module-album-biz</artifactId>
+  <name>fh-module-album-biz</name>
+  <description>相册域实现：分组 CRUD + 拖拽排序、图片 CRUD + 城市、同分组 MD5 查重、级联删除。</description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-module-album-api</artifactId>
+    </dependency>
+    <!-- 跨域依赖：只允许依赖对方 -api，禁止依赖 file-biz -->
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-module-file-api</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.baomidou</groupId>
+      <artifactId>mybatis-plus-spring-boot3-starter</artifactId>
+    </dependency>
+  </dependencies>
+</project>

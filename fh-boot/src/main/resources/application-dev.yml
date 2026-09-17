@@ -1,0 +1,32 @@
+# 开发环境：本机 brew 装的 mysql@8.0（无 root 口令，只监听 localhost）
+spring:
+  datasource:
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    url: jdbc:mysql://127.0.0.1:3306/family_home?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Shanghai&useSSL=false&allowPublicKeyRetrieval=true&rewriteBatchedStatements=true
+    username: root
+    password: ""
+    hikari:
+      maximum-pool-size: 10
+      minimum-idle: 2
+      pool-name: fh-dev-pool
+
+logging:
+  level:
+    root: info
+    com.familyhome: debug
+    # 打开 SQL 日志便于核对"查询有没有漏掉 status <> 'DELETED'"（方案 §10 风险 5）
+    com.familyhome.file.biz.dao: debug
+    com.familyhome.album.biz.dao: debug
+    com.familyhome.recipe.biz.dao: debug
+    # vault.biz.dao 刻意**不开**：这里的 SQL 日志只为了审计三态手写过滤，
+    # 账号本用 @TableLogic 没有可审计的漏网，打开只会把口令密文连同 dev 密钥一起落进日志文件。
+
+fh:
+  storage:
+    # 开发期放用户目录下，避免 /data 需要 root 权限
+    root: ${user.home}/family-home-data/files
+  vault:
+    # 这是仓库里公开的 **dev-only** 密钥，只用于本机测试数据，永远不要拿它加密真实口令。
+    # 一旦在 dev 库里存过条目，就不要再用同一份数据当"真实账号本"——删库重来（见 deploy/dev-seed.sh）。
+    # 想换成自己的：export FH_VAULT_PASSWORD_KEY="$(openssl rand -base64 32)"
+    password-key: "${FH_VAULT_PASSWORD_KEY:VOegavcpmFo/pk90jC1z9lD9HkCU9x+ph00kA6Z9pn8=}"

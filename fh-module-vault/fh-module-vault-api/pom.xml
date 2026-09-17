@@ -1,0 +1,27 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.familyhome</groupId>
+    <artifactId>fh-module-vault</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fh-module-vault-api</artifactId>
+  <name>fh-module-vault-api</name>
+  <description>
+    账号本域对外契约。**一期和可预见二期都不该有跨域调用方**——
+    相册/菜谱没有任何理由读用户的密码本，允许这种依赖就是边界失守。
+    这里只放一个占位 package-info，将来真要暴露（比如二期做"导入导出"独立服务）再加 Facade。
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-common</artifactId>
+    </dependency>
+  </dependencies>
+</project>

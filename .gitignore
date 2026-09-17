@@ -1,0 +1,27 @@
+target/
+build/
+out/
+
+# IDE
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+.settings/
+.classpath
+.project
+
+# OS
+.DS_Store
+Thumbs.db
+
+# 运行时产物
+logs/
+*.log
+*.pid
+
+# 本地配置覆盖（含数据库口令等，不入库）
+application-local.yml
+application-local.yaml
+application-local.properties

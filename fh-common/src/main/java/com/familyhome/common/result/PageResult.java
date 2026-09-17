@@ -1,0 +1,38 @@
+package com.familyhome.common.result;
+
+import java.util.Collections;
+import java.util.List;
+import lombok.Getter;
+
+/**
+ * 统一分页响应。
+ *
+ * <p>{@code hasMore} 是给 H5 无限滚动用的，省掉前端自己算 {@code pageNo * pageSize < total}。
+ *
+ * @param <T> 列表元素类型
+ */
+@Getter
+public class PageResult<T> {
+
+    private final List<T> list;
+    private final long total;
+    private final long pageNo;
+    private final int pageSize;
+    private final boolean hasMore;
+
+    private PageResult(List<T> list, long total, long pageNo, int pageSize) {
+        this.list = list;
+        this.total = total;
+        this.pageNo = pageNo;
+        this.pageSize = pageSize;
+        this.hasMore = pageNo * pageSize < total;
+    }
+
+    public static <T> PageResult<T> of(List<T> list, long total, long pageNo, int pageSize) {
+        return new PageResult<>(list, total, pageNo, pageSize);
+    }
+
+    public static <T> PageResult<T> empty(long pageNo, int pageSize) {
+        return new PageResult<>(Collections.emptyList(), 0L, pageNo, pageSize);
+    }
+}
