@@ -5,6 +5,7 @@ import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.ContentStatus;
 import com.familyhome.common.exception.BizException;
 import com.familyhome.recipe.api.dto.CartItemDTO;
@@ -59,6 +60,7 @@ public class RecipeCartServiceImpl implements RecipeCartService {
             CartItemDTO dto = new CartItemDTO();
             dto.setRecipeId(item.getRecipeId());
             dto.setQty(item.getQty());
+            dto.setCreatorId(item.getCreatorId());
             dto.setPractices(parsePractices(item.getPractices()));
             return dto;
         }).toList());
@@ -79,8 +81,9 @@ public class RecipeCartServiceImpl implements RecipeCartService {
             throw BizException.notFound(null, "菜品不存在");
         }
         String practicesJson = writePractices(request.getPractices());
-        log.info("购物车改量: recipeId={}, qty={}, practices={}",
-                request.getRecipeId(), request.getQty(), practicesJson);
+        Long creatorId = CurrentUserHolder.requireUserId();
+        log.info("购物车改量: recipeId={}, qty={}, practices={}, creatorId={}",
+                request.getRecipeId(), request.getQty(), practicesJson, creatorId);
         RecipeCartItemDO existing = cartMapper.selectOne(
                 new LambdaQueryWrapper<RecipeCartItemDO>()
                         .eq(RecipeCartItemDO::getRecipeId, request.getRecipeId()));
@@ -88,6 +91,7 @@ public class RecipeCartServiceImpl implements RecipeCartService {
             RecipeCartItemDO item = new RecipeCartItemDO();
             item.setRecipeId(request.getRecipeId());
             item.setQty(request.getQty());
+            item.setCreatorId(creatorId);
             item.setPractices(practicesJson);
             cartMapper.insert(item);
         } else {

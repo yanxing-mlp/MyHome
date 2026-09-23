@@ -28,6 +28,11 @@ public class RecipeCartItemDO {
     private Integer qty;
 
     /**
+     * 加购人 ID
+     */
+    private Long creatorId;
+
+    /**
      * 所选做法 JSON（{@code [{"groupId":1,"optionId":2}]}），NULL = 未选
      */
     private String practices;

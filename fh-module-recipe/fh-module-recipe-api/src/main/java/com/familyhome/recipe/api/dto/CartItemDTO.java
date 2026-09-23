@@ -15,6 +15,11 @@ public class CartItemDTO {
     private Integer qty;
 
     /**
+     * 加购人 ID
+     */
+    private Long creatorId;
+
+    /**
      * 所选做法，NULL/空 = 未选
      */
     private List<CartPracticeDTO> practices;
