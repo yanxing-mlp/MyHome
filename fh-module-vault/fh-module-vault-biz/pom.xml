@@ -13,9 +13,9 @@
   <artifactId>fh-module-vault-biz</artifactId>
   <name>fh-module-vault-biz</name>
   <description>
-    账号本域实现：跨平台账号密码的增删改查 + AES-256-GCM 加解密。
+    密码本域实现：跨平台账号密码的增删改查 + AES-256-GCM 加解密。
     刻意**不依赖 fh-module-file-api**——本域只存文本，没有任何文件，
-    少一条跨域依赖就把"账号本先拆出去"这条路铺平了。
+    少一条跨域依赖就把"密码本先拆出去"这条路铺平了。
   </description>
 
   <dependencies>

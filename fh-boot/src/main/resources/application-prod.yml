@@ -16,6 +16,14 @@ logging:
     com.familyhome: info
   file:
     name: /data/family-home/logs/server.log
+  logback:
+    rollingpolicy:
+      # 日志只保留 7 天：按天（+ 单文件超 10MB 时按序号）滚动成 server.log.yyyy-MM-dd.i.gz，
+      # logback 在每次滚动时自动删除超过 max-history 天的归档，clean-history-on-start 再保证
+      # 应用重启（含跨天停机）时也清一次——这就是"超过 7 天定时删除"，无需另写定时任务。
+      # file-name-pattern 不另设，沿用 Spring Boot 默认（${LOG_FILE}.%d{yyyy-MM-dd}.%i.gz）。
+      max-history: 7
+      clean-history-on-start: true
 
 fh:
   storage:
@@ -25,3 +33,15 @@ fh:
     # 只从环境变量注入，**不落仓库、不进镜像**。漏配时 VaultCipherManager 会启动失败（预期行为）。
     # 生成：openssl rand -base64 32 ；写法与 compose 里其它 secret 一致（env_file 或 secrets）。
     password-key: ${FH_VAULT_PASSWORD_KEY:}
+  transport-crypto:
+    # 同上：只从环境变量注入，构建前端时要把同一个值以 VITE_FH_TRANSPORT_CRYPTO_SALT 传给
+    # vite build（见 web 仓 README 的「口令的传输层加密」一节）。两边不一致 = 全站登录报"口令无法解密"。
+    # 漏配（空串）时 TransportCipher 构造器直接抛 IllegalStateException → 启动失败，与上面那把 vault 密钥同一口径。
+    # 生成：openssl rand -hex 16
+    salt: ${FH_TRANSPORT_CRYPTO_SALT:}
+  auth:
+    # 登录会话令牌的 HMAC 签名密钥：只从环境变量注入，**不落仓库、不进镜像**。
+    # 它取代了旧那个可手搓的 X-User-Id 头——服务端用它签发/校验 Bearer 令牌，验不过一律 401。
+    # 漏配（空串）时 SessionToken 构造器抛 IllegalStateException → 启动失败，与 vault 密钥、传输盐同一口径。
+    # 生成：openssl rand -base64 48
+    token-secret: ${FH_AUTH_TOKEN_SECRET:}

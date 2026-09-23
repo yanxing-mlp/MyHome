@@ -13,7 +13,7 @@
   <artifactId>fh-module-vault</artifactId>
   <packaging>pom</packaging>
   <name>fh-module-vault</name>
-  <description>账号本域聚合模块（api + biz）</description>
+  <description>密码本域聚合模块（api + biz）</description>
 
   <modules>
     <module>fh-module-vault-api</module>

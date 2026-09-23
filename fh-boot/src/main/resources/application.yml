@@ -7,10 +7,12 @@ spring:
 
   servlet:
     multipart:
-      # 前端已把长边压到 2560 并转 JPEG，20MB 单图上限足够宽松
-      max-file-size: 20MB
-      # 一次批量上传多张，请求体上限放宽
-      max-request-size: 100MB
+      # 图片走前端压缩（长边 2560、转 JPEG），文档一般也就几 MB；真正吃这一档的是视频管理——
+      # 手机原片动辄几百 MB，所以单文件上限抬到 500MB。视频上传是流式落盘（FileStorageWriter.writeVideoStream），
+      # 不整块读进内存，但 Spring 仍会先把整个 multipart 缓冲到临时目录，故上限即单支视频的最大体积。
+      max-file-size: 500MB
+      # 一次只传一支视频，请求体上限与单文件对齐（多留一点余量给表单字段）
+      max-request-size: 512MB
 
   flyway:
     enabled: true
@@ -20,6 +22,7 @@ spring:
     #   album  -> V2xx
     #   recipe -> V3xx
     #   vault  -> V4xx
+    #   user   -> V5xx
     # 这样各域独立加迁移不会撞版本号，将来按域拆库时直接整目录搬走。
     # 注意：**已应用的迁移文件不能再改**，改了 checksum 会让 validate-on-migrate 直接启动失败
     # （给已上线的表加列只能新开一条，见 album/V201__add_album_image_pinned.sql）。
@@ -28,6 +31,7 @@ spring:
       - classpath:db/migration/album
       - classpath:db/migration/recipe
       - classpath:db/migration/vault
+      - classpath:db/migration/user
     # 【号段方案的必要配套】out-of-order 必须为 true，否则号段设计直接跑不起来。
     # 实测踩到：库里已应用 100/200/300/301，album 域新开一条 V201 时 Flyway 报
     #   "Detected resolved migration not applied to database: 201. To allow executing
@@ -45,7 +49,7 @@ spring:
 mybatis-plus:
   # classpath* 而不是 classpath：mapper XML 分散在各 biz 模块的 jar 里，必须跨 jar 扫描
   mapper-locations: classpath*:mapper/**/*.xml
-  type-aliases-package: com.familyhome.file.biz.entity,com.familyhome.album.biz.entity,com.familyhome.recipe.biz.entity,com.familyhome.vault.biz.entity
+  type-aliases-package: com.familyhome.file.biz.entity,com.familyhome.album.biz.entity,com.familyhome.recipe.biz.entity,com.familyhome.vault.biz.entity,com.familyhome.user.biz.entity
   configuration:
     map-underscore-to-camel-case: true
     # 三态 status 存枚举名，靠 MyBatis 默认的 EnumTypeHandler（按 name() 存取），不需要额外配置
@@ -70,9 +74,17 @@ fh:
     root: /data/family-home/files
     url-prefix: /files
 
-  # 账号本（v5 需求）。口令用 AES-256-GCM 可逆加密存储，密钥在这里。
+  # 密码本（v5 需求）。口令用 AES-256-GCM 可逆加密存储，密钥在这里。
   # 刻意留空 + 由各 profile 覆盖：Base64 的 32 字节，VaultCipherManager 启动时校验，
   # 配错/漏配直接启动失败（不能拖到第一次解密才发现，那时已经有条目用错密钥入库了）。
   # 生成方式：openssl rand -base64 32
   vault:
     password-key: ""
+
+  # 口令的**传输段**加密（v11）。前端提交前加密、服务端在业务入口解密；密码本 reveal 反向。
+  # 这跟上面那个 vault 密钥是两件事：vault 的密钥管"库里怎么存"，这一串只管"路上怎么说"。
+  # 同样刻意留空、同样由 TransportCipher 构造时校验（至少 16 字符、纯 ASCII），漏配就启动失败。
+  # ⚠️ 这一串必须与前端 packages/shared/src/crypto/transport.ts 的默认值/构建期变量逐字符相同。
+  # 生成方式：openssl rand -hex 16
+  transport-crypto:
+    salt: ""

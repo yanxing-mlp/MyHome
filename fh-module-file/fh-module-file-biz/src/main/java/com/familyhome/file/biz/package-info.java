@@ -11,7 +11,9 @@
  *   <li>MD5 秒传：命中则新建 file_object 记录 + 硬链接复用物理文件，<b>不共享记录</b>，
  *       以保持"一条 file_object 对应一个业务引用"的删除语义（方案 §6.9）。</li>
  *   <li>缩略图：长边 480、质量 0.8。前端 canvas 转码已应用 EXIF 旋转，<b>后端不需要再旋转</b>（方案 §6.6）。</li>
- *   <li>EXIF fallback：前端没传 lng/lat 且文件自带 EXIF 时补读一次。</li>
+ *   <li><b>EXIF 不归本域</b>：{@code file_object} 没有 lng/lat/shoot_time 列，上传接口也不收这三项。
+ *       相册要存拍摄信息，由前端提取 EXIF 后随<b>绑定项</b>传进相册域，写{@code album_image} 那一行
+ *       （方案 §6.6 坑 1：canvas 转码会把 EXIF 全丢掉，所以只能在前端提取）。</li>
  * </ul>
  *
  * <p>本包不感知任何业务域——{@code bizType} 只是统计标签，file 域不知道相册和菜谱的存在。

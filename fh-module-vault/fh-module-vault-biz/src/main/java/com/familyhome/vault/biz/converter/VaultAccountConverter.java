@@ -22,6 +22,9 @@ public final class VaultAccountConverter {
         vo.setId(source.getId());
         vo.setName(source.getName());
         vo.setAccount(source.getAccount());
+        vo.setScope(source.getScope());
+        vo.setOwnerId(source.getOwnerId());
+        vo.setCreatorId(source.getCreatorId());
         vo.setCreateTime(source.getCreateTime());
         vo.setUpdateTime(source.getUpdateTime());
         return vo;

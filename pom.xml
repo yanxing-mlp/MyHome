@@ -17,7 +17,7 @@
   <packaging>pom</packaging>
 
   <name>family-home-server</name>
-  <description>家庭 Home 服务端（相册 + 菜谱 + 账号本）。单体多模块，按业务域拆分，为未来系统拆分预留边界。</description>
+  <description>家庭 Home 服务端（相册 + 菜谱 + 密码本）。单体多模块，按业务域拆分，为未来系统拆分预留边界。</description>
 
   <!--
     模块依赖方向（只能从上往下，详见 plans/家庭home-一期方案.md §3）：
@@ -26,7 +26,10 @@
       *-api    ->  fh-common
     禁止：*-biz 依赖其他域的 *-biz；禁止跨域 SQL join。
 
-    vault（账号本）域是 v5 新增的第四个域，也是唯一**不依赖 file-api** 的域——它只存文本，没有文件。
+    vault（密码本）域是 v5 新增的第四个域，也是唯一**不依赖 file-api** 的域——它只存文本，没有文件。
+
+    user（账号）域是第五个域，也是唯一**没有任何域依赖它**的域：别的域只存一个可空的 creator_id，
+    昵称由前端字典解析（见 fh-module-user-api 的包注释），所以"加添加人"没有在四个域里各开一条跨域边。
   -->
   <modules>
     <module>fh-common</module>
@@ -34,6 +37,7 @@
     <module>fh-module-album</module>
     <module>fh-module-recipe</module>
     <module>fh-module-vault</module>
+    <module>fh-module-user</module>
     <module>fh-boot</module>
   </modules>
 
@@ -90,6 +94,16 @@
       <dependency>
         <groupId>com.familyhome</groupId>
         <artifactId>fh-module-vault-biz</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-user-api</artifactId>
+        <version>${project.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>com.familyhome</groupId>
+        <artifactId>fh-module-user-biz</artifactId>
         <version>${project.version}</version>
       </dependency>
 

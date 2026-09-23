@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.familyhome</groupId>
+    <artifactId>family-home-server</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fh-module-user</artifactId>
+  <packaging>pom</packaging>
+  <name>fh-module-user</name>
+  <description>账号域聚合模块（api + biz）。第五个域：全家几个人是谁、谁登录了、谁能管账号。</description>
+
+  <modules>
+    <module>fh-module-user-api</module>
+    <module>fh-module-user-biz</module>
+  </modules>
+</project>

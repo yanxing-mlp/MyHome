@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <parent>
+    <groupId>com.familyhome</groupId>
+    <artifactId>fh-module-user</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+  </parent>
+
+  <artifactId>fh-module-user-api</artifactId>
+  <name>fh-module-user-api</name>
+  <description>
+    账号域对外契约。**一期刻意是空的**（只有一个 package-info）。
+    各业务域要显示"添加人"的昵称，走的是前端那本账号字典（GET /api/b/user/options），
+    不是后端跨域查名字——与做法选项名字不进接口、由 admin 现查做法字典同一口径（方案 §7.3）。
+    所以 album/recipe/file/vault 四个域都没有依赖本模块，少四条跨域边。
+    将来真要后端解析名字（比如导出报表）再在这里加 UserFacade。
+  </description>
+
+  <dependencies>
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-common</artifactId>
+    </dependency>
+  </dependencies>
+</project>

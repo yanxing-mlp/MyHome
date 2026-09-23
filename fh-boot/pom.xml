@@ -18,7 +18,7 @@
   </description>
 
   <dependencies>
-    <!-- 聚合四个业务域的 biz，由 Spring 扫描装配 -->
+    <!-- 聚合五个业务域的 biz，由 Spring 扫描装配 -->
     <dependency>
       <groupId>com.familyhome</groupId>
       <artifactId>fh-module-file-biz</artifactId>
@@ -34,6 +34,10 @@
     <dependency>
       <groupId>com.familyhome</groupId>
       <artifactId>fh-module-vault-biz</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.familyhome</groupId>
+      <artifactId>fh-module-user-biz</artifactId>
     </dependency>
 
     <dependency>

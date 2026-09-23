@@ -1,14 +1,19 @@
 package com.familyhome.boot.config;
 
+import com.familyhome.file.biz.config.FileStorageConfig;
+import java.io.IOException;
 import java.nio.file.Paths;
 import java.time.Duration;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
 import org.springframework.web.servlet.config.annotation.InterceptorRegistry;
 import org.springframework.web.servlet.config.annotation.ResourceHandlerRegistry;
 import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
+import org.springframework.web.servlet.resource.PathResourceResolver;
 
 /**
  * 全局 Web 配置。
@@ -18,7 +23,11 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  */
 @Slf4j
 @Configuration
+@RequiredArgsConstructor
 public class WebMvcConfig implements WebMvcConfigurer {
+
+    /** 认"现在是谁"的那一层，见 {@link CurrentUserInterceptor}；它自己带上了所需的服务。 */
+    private final CurrentUserInterceptor currentUserInterceptor;
 
     @Value("${fh.storage.root}")
     private String storageRoot;
@@ -41,19 +50,37 @@ public class WebMvcConfig implements WebMvcConfigurer {
 
         registry.addResourceHandler(pattern)
                 .addResourceLocations(location)
-                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable());
+                .setCacheControl(CacheControl.maxAge(Duration.ofDays(365)).cachePublic().immutable())
+                .resourceChain(false)
+                .addResolver(new PathResourceResolver() {
+                    @Override
+                    protected Resource getResource(String resourcePath, Resource location) throws IOException {
+                        // 私人逻辑路径（文档 private-documents/、视频 private-videos/）永不作为静态资源；
+                        // 即便误放进公共根也不可访问。命中任一私人前缀就当作不存在。
+                        if (FileStorageConfig.privatePrefixOf(resourcePath) != null) {
+                            return null;
+                        }
+                        return super.getResource(resourcePath, location);
+                    }
+                });
 
         log.info("静态资源映射: {} -> {}", pattern, location);
     }
 
     /**
-     * 一期不做鉴权，此处<b>刻意留空</b>。
+     * 注册 {@link CurrentUserInterceptor}：认"现在是谁"，<b>不做</b>访问控制。
      *
-     * <p>将来加 token 校验只在这一处插入，不动任何业务代码（方案 §5.7）。
-     * B 端接口的访问控制目前完全依赖 nginx 的内网网段白名单（方案 §8.3）。
+     * <p>这一层只解析 {@code Authorization: Bearer <令牌>}、验签后写进 ThreadLocal，头缺失也放行（当匿名），
+     * 所以没有白名单要维护（{@code /login} 和 {@code /options} 天生不带这个头）。"写数据必须有身份"由各 service 调
+     * {@code CurrentUserHolder.requireUserId()} 保证；"谁能管账号"由 {@code requireAdmin()} 保证；
+     * B 端接口整体暴露到什么网络，仍然是部署层的 nginx 内网白名单（方案 §8.3）。
+     *
+     * <p>只拦 {@code /api/**}：{@code /files/**} 走静态资源映射，图片本身要能直接放进
+     * {@code <img src>}，不可能带自定义头。
      */
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
-        // intentionally empty
+        registry.addInterceptor(currentUserInterceptor)
+                .addPathPatterns("/api/**");
     }
 }

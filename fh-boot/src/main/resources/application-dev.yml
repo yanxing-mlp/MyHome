@@ -18,8 +18,9 @@ logging:
     com.familyhome.file.biz.dao: debug
     com.familyhome.album.biz.dao: debug
     com.familyhome.recipe.biz.dao: debug
-    # vault.biz.dao 刻意**不开**：这里的 SQL 日志只为了审计三态手写过滤，
-    # 账号本用 @TableLogic 没有可审计的漏网，打开只会把口令密文连同 dev 密钥一起落进日志文件。
+    # 必须显式覆盖父包 DEBUG；否则新增判重 SQL 及原写入参数会记录手机号、账号和口令密文。
+    com.familyhome.user.biz.dao: info
+    com.familyhome.vault.biz.dao: info
 
 fh:
   storage:
@@ -27,6 +28,18 @@ fh:
     root: ${user.home}/family-home-data/files
   vault:
     # 这是仓库里公开的 **dev-only** 密钥，只用于本机测试数据，永远不要拿它加密真实口令。
-    # 一旦在 dev 库里存过条目，就不要再用同一份数据当"真实账号本"——删库重来（见 deploy/dev-seed.sh）。
+    # 一旦在 dev 库里存过条目，就不要再用同一份数据当"真实密码本"——删库重来（见 deploy/dev-seed.sh）。
     # 想换成自己的：export FH_VAULT_PASSWORD_KEY="$(openssl rand -base64 32)"
     password-key: "${FH_VAULT_PASSWORD_KEY:VOegavcpmFo/pk90jC1z9lD9HkCU9x+ph00kA6Z9pn8=}"
+  transport-crypto:
+    # 传输段那一串盐。同样是**仓库内公开的 dev-only 值**，与前端
+    # packages/shared/src/crypto/transport.ts 里的默认值必须逐字符一致，改一处不改另一处
+    # 的表现是"所有人登录都报口令无法解密"。生产换成自己的：export FH_TRANSPORT_CRYPTO_SALT="$(openssl rand -hex 16)"
+    salt: "${FH_TRANSPORT_CRYPTO_SALT:fh-dev-7184bf06e1a8eaf27d22bd216a3c42f5}"
+  auth:
+    # 登录会话令牌的 HMAC 签名密钥。**仓库内公开的 dev-only 值**：拿到它就能给自己签一枚
+    # "我是大宝(ADMIN)"的令牌，所以它保护的是本机测试数据，永远不要拿它签发真实登录态。
+    # 它取代了旧那个可手搓的 X-User-Id 头——现在身份必须由服务端用这把密钥签出来才认。
+    # 生产换成自己的（且只从环境变量注入）：export FH_AUTH_TOKEN_SECRET="$(openssl rand -base64 48)"
+    token-secret: "${FH_AUTH_TOKEN_SECRET:fh-dev-2f6c9a41d8e7b305a1c6f9e2d7b4081c3a5e9f6d2b7c4081}"
+

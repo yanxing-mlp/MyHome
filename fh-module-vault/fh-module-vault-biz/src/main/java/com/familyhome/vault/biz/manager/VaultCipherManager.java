@@ -56,7 +56,7 @@ public class VaultCipherManager {
     private static SecretKeySpec parseKey(String base64Key) {
         if (!StringUtils.hasText(base64Key)) {
             throw new IllegalStateException(
-                    "fh.vault.password-key 未配置：账号本无法加解密口令。"
+                    "fh.vault.password-key 未配置：密码本无法加解密口令。"
                             + "生成方式：openssl rand -base64 32");
         }
         byte[] decoded;

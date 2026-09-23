@@ -1,6 +1,6 @@
 package com.familyhome.common.result;
 
-import java.util.Collections;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import java.util.List;
 import lombok.Getter;
 
@@ -14,10 +14,19 @@ import lombok.Getter;
 @Getter
 public class PageResult<T> {
 
+    @JsonProperty("list")
     private final List<T> list;
+    
+    @JsonProperty("total")
     private final long total;
+    
+    @JsonProperty("pageNo")
     private final long pageNo;
+    
+    @JsonProperty("pageSize")
     private final int pageSize;
+    
+    @JsonProperty("hasMore")
     private final boolean hasMore;
 
     private PageResult(List<T> list, long total, long pageNo, int pageSize) {
@@ -30,9 +39,5 @@ public class PageResult<T> {
 
     public static <T> PageResult<T> of(List<T> list, long total, long pageNo, int pageSize) {
         return new PageResult<>(list, total, pageNo, pageSize);
-    }
-
-    public static <T> PageResult<T> empty(long pageNo, int pageSize) {
-        return new PageResult<>(Collections.emptyList(), 0L, pageNo, pageSize);
     }
 }

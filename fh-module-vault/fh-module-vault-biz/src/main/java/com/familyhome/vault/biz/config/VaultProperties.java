@@ -6,7 +6,7 @@ import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.stereotype.Component;
 
 /**
- * 账号本域配置（{@code fh.vault.*}）。
+ * 密码本域配置（{@code fh.vault.*}）。
  *
  * <p>放在 vault-biz 而不是 fh-boot：配置项属于业务域自己，fh-boot 只做启动聚合（方案 §3.1）。
  */
