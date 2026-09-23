@@ -234,13 +234,14 @@ CREATE TABLE `recipe_practice_rel` (
 CREATE TABLE `recipe_cart_item` (
   `id`          BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
   `recipe_id`   BIGINT UNSIGNED NOT NULL,
+  `creator_id`  BIGINT UNSIGNED NOT NULL                COMMENT '加购人 ID（一人一菜一行）',
   `qty`         INT             NOT NULL DEFAULT 1,
   `practices`   VARCHAR(500)    DEFAULT NULL            COMMENT '所选做法 JSON，NULL=未选',
   `create_time` DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
   `update_time` DATETIME(3)     NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
   PRIMARY KEY (`id`),
-  UNIQUE KEY `uk_recipe` (`recipe_id`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='购物车条目（一菜一行）';
+  UNIQUE KEY `uk_recipe_creator` (`recipe_id`, `creator_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci COMMENT='购物车条目（一人一菜一行）';
 
 CREATE TABLE `recipe_cart_state` (
   `id`          BIGINT UNSIGNED NOT NULL DEFAULT 1,

@@ -39,7 +39,10 @@ public class RecipeCartCController {
         return Result.ok(cartService.listCart());
     }
 
-    /** 按版本设置数量（绝对值；qty &lt;= 0 移除）；practices 整体覆盖，返回新版本快照。 */
+    /**
+     * 按版本设置数量（绝对值；qty &lt;= 0 移除）；practices 整体覆盖，返回新版本快照。
+     * 一人一菜一行：动的只是调用人自己那道菜的那一行，同菜别人的行不受影响。
+     */
     @PutMapping
     public Result<CartSnapshotDTO> setItem(@RequestBody @Valid CartItemRequest request) {
         return Result.ok(cartService.setItem(request));

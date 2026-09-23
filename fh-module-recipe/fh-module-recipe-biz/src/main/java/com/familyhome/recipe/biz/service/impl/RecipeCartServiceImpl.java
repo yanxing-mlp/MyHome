@@ -30,8 +30,11 @@ import java.util.List;
 /**
  * 点餐购物车服务实现。
  *
- * <p>一菜一行不变；所选做法以 JSON 串存在 {@code practices} 列上，
- * {@code setItem} 整体覆盖（请求不带 practices 即视为清空做法）。
+ * <p>一人一菜一行：唯一键 {@code (recipe_id, creator_id)}（V505），同一道菜不同加购人各占一行，
+ * 前端抽屉按加购人分模块展示时才不会把两个人的份数混在一行里。
+ * 所选做法以 JSON 串存在 {@code practices} 列上，{@code setItem} 整体覆盖（请求不带 practices 即视为清空做法）。
+ * 改量与减到 0 删行都只作用于"调用人自己那道菜的那一行"，所以两个分支都要先取身份；
+ * 清空仍是整辆车（全家共用一辆车，清空是家庭动作）。
  */
 @Slf4j
 @Service
@@ -72,8 +75,10 @@ public class RecipeCartServiceImpl implements RecipeCartService {
     public CartSnapshotDTO setItem(CartItemRequest request) {
         Long version = cartState.lock();
         cartState.checkVersion(request.getVersion(), version);
+        // 车行属于加购人：改量与删行动的都是"自己那道菜的那一行"，两个分支都得先取身份
+        Long creatorId = CurrentUserHolder.requireUserId();
         if (request.getQty() <= 0) {
-            removeItem(request.getRecipeId());
+            removeItem(request.getRecipeId(), creatorId);
             return snapshot(cartState.advance(version));
         }
         RecipeDO recipe = recipeMapper.selectById(request.getRecipeId());
@@ -81,12 +86,13 @@ public class RecipeCartServiceImpl implements RecipeCartService {
             throw BizException.notFound(null, "菜品不存在");
         }
         String practicesJson = writePractices(request.getPractices());
-        Long creatorId = CurrentUserHolder.requireUserId();
         log.info("购物车改量: recipeId={}, qty={}, practices={}, creatorId={}",
                 request.getRecipeId(), request.getQty(), practicesJson, creatorId);
+        // 同菜别人那一行不在这里命中：各改各的，互不覆盖
         RecipeCartItemDO existing = cartMapper.selectOne(
                 new LambdaQueryWrapper<RecipeCartItemDO>()
-                        .eq(RecipeCartItemDO::getRecipeId, request.getRecipeId()));
+                        .eq(RecipeCartItemDO::getRecipeId, request.getRecipeId())
+                        .eq(RecipeCartItemDO::getCreatorId, creatorId));
         if (existing == null) {
             RecipeCartItemDO item = new RecipeCartItemDO();
             item.setRecipeId(request.getRecipeId());
@@ -115,11 +121,13 @@ public class RecipeCartServiceImpl implements RecipeCartService {
         return snapshot(cartState.advance(currentVersion));
     }
 
-    private void removeItem(Long recipeId) {
+    /** 减到 0 只删调用人自己那一行；同菜别人的行留着。 */
+    private void removeItem(Long recipeId, Long creatorId) {
         int rows = cartMapper.delete(new LambdaQueryWrapper<RecipeCartItemDO>()
-                .eq(RecipeCartItemDO::getRecipeId, recipeId));
+                .eq(RecipeCartItemDO::getRecipeId, recipeId)
+                .eq(RecipeCartItemDO::getCreatorId, creatorId));
         if (rows > 0) {
-            log.info("购物车移除: recipeId={}", recipeId);
+            log.info("购物车移除: recipeId={}, creatorId={}", recipeId, creatorId);
         }
     }
 

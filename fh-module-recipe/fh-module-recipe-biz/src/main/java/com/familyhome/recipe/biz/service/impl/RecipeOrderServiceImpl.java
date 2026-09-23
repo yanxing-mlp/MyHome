@@ -277,6 +277,8 @@ public class RecipeOrderServiceImpl implements RecipeOrderService {
     @Transactional
     public ReorderResultDTO reorderOrder(Long id) {
         Long version = cartState.lock();
+        // 历史明细写回车只写"自己"的行：一人一菜一行，同菜别人的行不动
+        Long creatorId = CurrentUserHolder.requireUserId();
         RecipeOrderDO order = orderMapper.selectById(id);
         if (order == null) {
             throw BizException.notFound(ErrorCode.RECIPE_ORDER_NOT_FOUND, "订单不存在");
@@ -303,8 +305,10 @@ public class RecipeOrderServiceImpl implements RecipeOrderService {
             throw BizException.of(null, "这个订单的菜都已经下架删除了，没能加入");
         }
 
-        // 追加进现有购物车：同菜累加份数，做法以本单快照整体覆盖（cart 侧同样是"不带就清空"的覆盖语义）
-        Map<Long, RecipeCartItemDO> cartByRecipe = cartMapper.selectList(new LambdaQueryWrapper<>())
+        // 追加进自己名下的购物车行：同菜累加份数，做法以本单快照整体覆盖（cart 侧同样是"不带就清空"的覆盖语义）
+        Map<Long, RecipeCartItemDO> cartByRecipe = cartMapper.selectList(
+                        new LambdaQueryWrapper<RecipeCartItemDO>()
+                                .eq(RecipeCartItemDO::getCreatorId, creatorId))
                 .stream()
                 .collect(Collectors.toMap(RecipeCartItemDO::getRecipeId, Function.identity(), (a, b) -> a));
         for (RecipeOrderItemDO item : validItems) {
@@ -313,6 +317,7 @@ public class RecipeOrderServiceImpl implements RecipeOrderService {
                 RecipeCartItemDO cartItem = new RecipeCartItemDO();
                 cartItem.setRecipeId(item.getRecipeId());
                 cartItem.setQty(item.getQty());
+                cartItem.setCreatorId(creatorId);
                 cartItem.setPractices(item.getPractices());
                 cartMapper.insert(cartItem);
                 cartByRecipe.put(item.getRecipeId(), cartItem);
