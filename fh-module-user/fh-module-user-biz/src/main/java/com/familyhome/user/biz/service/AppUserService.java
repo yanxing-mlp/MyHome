@@ -89,14 +89,20 @@ public class AppUserService {
      * 登录页下拉框 + 各页"添加人"的 id → 昵称字典。白名单接口，不需要登录令牌。
      *
      * <p>按 id 正序（大宝 1、小宝 2），不是按拼音——一期两个人，将来多了也不值得为排序建列。
+     *
+     * <p>2026-09-23 起顺带把头像缩略图 URL 也带上：C 端购物车按加购人分模块后模块头要画头像，
+     * 而这份字典是 h5 唯一拿得到"别人头像"的地方。头像走 {@link #avatarUrls} 批量取，
+     * 仍然是"一次查询 + 一次跨域调用"，不给手机号、不给角色这两条没变。
      */
     public List<UserOptionVO> options() {
         List<AppUserDO> users = appUserMapper.selectList(
                 new LambdaQueryWrapper<AppUserDO>().orderByAsc(AppUserDO::getId));
+        Map<Long, String> avatars = avatarUrls(users);
         return users.stream().map(user -> {
             UserOptionVO vo = new UserOptionVO();
             vo.setId(user.getId());
             vo.setName(user.getName());
+            vo.setAvatarUrl(user.getAvatarFileId() == null ? null : avatars.get(user.getAvatarFileId()));
             return vo;
         }).toList();
     }

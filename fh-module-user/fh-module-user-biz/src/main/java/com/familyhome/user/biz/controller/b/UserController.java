@@ -59,7 +59,7 @@ public class UserController {
 
     private final AppUserService appUserService;
 
-    /** 登录页的下拉框数据；同时是两端"添加人"列的 id → 昵称字典。 */
+    /** 登录页的下拉框数据；同时是两端"添加人"列的 id → 昵称字典（2026-09-23 起顺带头像缩略图 URL）。 */
     @GetMapping("/options")
     public Result<List<UserOptionVO>> options() {
         return Result.ok(appUserService.options());

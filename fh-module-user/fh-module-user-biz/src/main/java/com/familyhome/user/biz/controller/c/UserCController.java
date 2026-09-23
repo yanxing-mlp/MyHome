@@ -22,12 +22,12 @@ import org.springframework.web.bind.annotation.RestController;
  * 连路径都不给</b>：前者是 B 端 ADMIN 的事，后者是 h5 没有那一页（C 端只有首页一张"当前是谁"卡）。
  * 服务端 {@code AppUserService} 里对账号管理还有第二道 {@code requireAdmin()}。
  *
- * <p>口令哈希从来不经这三条中的任何一条返回：{@code /options} 只有 id + 昵称，
+ * <p>口令哈希从来不经这三条中的任何一条返回：{@code /options} 只有 id + 昵称 + 头像缩略图，
  * {@code /login} 与 {@code /me} 返回的是 {@code UserBriefVO}（id/昵称/角色/头像），
  * 其中<b>只有 {@code /login} 多带一格服务端签发的登录令牌</b>（{@code /me} 恒为 null）。
  * C 端改口令因此没有路径——要改口令得上 B 端登录一次（v8 口径，见方案 §5.3）。
  *
- * <p>{@code /options} 同时是两端"添加人/下单人"的 id → 昵称字典（刻意不给手机号），
+ * <p>{@code /options} 同时是两端"添加人/下单人"的 id → 昵称字典（刻意不给手机号；2026-09-23 起多带一格头像缩略图 URL，供 C 端购物车按加购人分模块的模块头画头像），
  * 所以 C 端下单页与订单列表读的是这里这一条。
  *
  * <p>三条与 B 端同名接口共用同一套 service：{@code /options} 与 {@code /login} 本来就不要求身份
