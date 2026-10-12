@@ -18,6 +18,7 @@ import com.familyhome.vault.biz.model.request.VaultAccountCreateRequest;
 import com.familyhome.vault.biz.model.request.VaultAccountUpdateRequest;
 import com.familyhome.vault.biz.model.vo.admin.VaultAccountAdminVO;
 import com.familyhome.vault.biz.model.vo.admin.VaultPasswordVO;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -72,6 +73,22 @@ public class VaultAccountService {
                 result.getTotal(),
                 pageNo,
                 pageSize);
+    }
+
+    /**
+     * C 端只读列表：当前分区的全部条目，<b>整表返回不分页</b>（家庭量级几十条，与视频/相册 C 端同一取舍），
+     * 排序沿用 {@link #page} 的"最近改动在前"。返回 DO，裁剪成 C 端视图由 {@code VaultCController} 做。
+     *
+     * <p>分区/鉴权口径与其余方法一致：先过 {@link DataPartition#forRequest} 校验登录并定 scope + ownerId，
+     * PUBLIC 全家共享、PRIVATE 只当前账号，ADMIN 无例外；{@code @TableLogic} 自动附加 {@code deleted = 0}。
+     * 这一条只读、不带 keyword（C 端不做搜索），也不返回任何口令字段。
+     */
+    public List<VaultAccountDO> list(DataScope scope) {
+        DataPartition partition = DataPartition.forRequest(scope);
+        return vaultAccountMapper.selectList(
+                partitionQuery(partition)
+                        .orderByDesc(VaultAccountDO::getUpdateTime)
+                        .orderByDesc(VaultAccountDO::getId));
     }
 
     @Transactional
