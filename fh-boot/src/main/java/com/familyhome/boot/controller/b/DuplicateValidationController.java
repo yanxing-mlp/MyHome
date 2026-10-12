@@ -37,7 +37,7 @@ public class DuplicateValidationController {
 
     public enum Kind {
         RECIPE, RECIPE_CATEGORY, PRACTICE_GROUP, PRACTICE_OPTION,
-        ALBUM_GROUP, USER_NAME, USER_PHONE, VAULT_ACCOUNT, FILE_CATEGORY
+        ALBUM_GROUP, USER_NAME, USER_PHONE, VAULT_ACCOUNT, FILE_CATEGORY, FILE_GROUP
     }
 
     public record DuplicateRequest(
@@ -46,7 +46,9 @@ public class DuplicateValidationController {
             @Size(max = 128) String account,
             @Pattern(regexp = "FAMILY|PERSONAL|PUBLIC|PRIVATE", message = "数据分区不正确") String scope,
             @Positive Long excludeId,
-            @Positive Long groupId) {
+            @Positive Long groupId,
+            // 文件/视频分组唯一键含 biz_type（document/video 各自一套分组），只有 FILE_GROUP 用到
+            @Pattern(regexp = "document|video", message = "分组类型不正确") String bizType) {
     }
 
     @PostMapping("/duplicate")
@@ -78,6 +80,17 @@ public class DuplicateValidationController {
                 parameters.add(partition.scope().name());
                 parameters.add(partition.ownerId());
                 yield "SELECT 1 FROM file_category WHERE unique_name = ? AND scope = ? AND owner_id = ?";
+            }
+            case FILE_GROUP -> {
+                if (request.bizType() == null) {
+                    throw BizException.of(ErrorCode.BAD_REQUEST, "请选择分组类型");
+                }
+                DataPartition partition = DataPartition.forRequest(parseScope(request.scope(), DataScope.class));
+                // 参数顺序与 uk_file_group_name(biz_type, scope, owner_id, unique_name) 对齐
+                parameters.add(request.bizType());
+                parameters.add(partition.scope().name());
+                parameters.add(partition.ownerId());
+                yield "SELECT 1 FROM file_group WHERE unique_name = ? AND biz_type = ? AND scope = ? AND owner_id = ?";
             }
             case USER_NAME -> "SELECT 1 FROM app_user WHERE unique_name = ?";
             case USER_PHONE -> "SELECT 1 FROM app_user WHERE unique_phone = ?";

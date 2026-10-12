@@ -37,22 +37,24 @@ public class VideoController {
 
     private final VideoService videoService;
 
-    /** 列表，最近上传在前，每行带一枚现签的播放票据。 */
+    /** 列表，最近上传在前，每行带一枚现签的播放票据；groupId 不传 = 不按分组过滤（「全部视频」） */
     @GetMapping
     public Result<List<VideoVO>> list(
+            @RequestParam(required = false) Long groupId,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
-        return Result.ok(videoService.list(scope));
+        return Result.ok(videoService.list(scope, groupId));
     }
 
     /**
-     * 上传一支视频。multipart/form-data：{@code file} 视频本体。
+     * 上传一支视频。multipart/form-data：{@code file} 视频本体，{@code groupIds} 初始所属分组（可选，留空=未分组）。
      * 类型（扩展名 + mime）由服务端按文件名解析并校验（非视频 415），前端不传、也不能传。
      */
     @PostMapping
     public Result<VideoVO> upload(
             @RequestPart("file") MultipartFile file,
+            @RequestParam(name = "groupIds", required = false) List<Long> groupIds,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
-        return Result.ok(videoService.upload(file, scope));
+        return Result.ok(videoService.upload(file, groupIds, scope));
     }
 
     /** 删除（软删记录 + 物理删文件）。 */

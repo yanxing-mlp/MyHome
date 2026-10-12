@@ -19,6 +19,8 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
+import java.util.Objects;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.core.io.FileSystemResource;
@@ -70,26 +72,44 @@ public class VideoService {
     private final FileFacade fileFacade;
     private final FileStorageConfig config;
     private final VideoPlayTicket playTicket;
+    private final FileGroupService fileGroupService;
 
     /** 列表：最近上传在前，不分页（家庭量级）。每行带一枚现签的短时播放票据（B 端播放路径）。 */
-    public List<VideoVO> list(DataScope scope) {
-        return list(scope, STREAM_BASE_B);
+    public List<VideoVO> list(DataScope scope, Long groupId) {
+        return list(scope, groupId, STREAM_BASE_B);
     }
 
     /**
-     * C 端列表：查询、分区、票据与 B 端 {@link #list(DataScope)} 是同一套，只把每行 {@code playUrl}
+     * C 端列表：查询、分区、票据与 B 端 {@link #list(DataScope, Long)} 是同一套，只把每行 {@code playUrl}
      * 指向 C 端自有的 {@code /api/c/video/...} 播放流。返回的仍是 {@link VideoVO}，字段裁剪交给
      * {@code VideoCController}（与相册 C 端在 controller 里把 {@code AlbumImageVO} 裁成 BriefVO 同一口径）。
      */
-    public List<VideoVO> listForClient(DataScope scope) {
-        return list(scope, STREAM_BASE_C);
+    public List<VideoVO> listForClient(DataScope scope, Long groupId) {
+        return list(scope, groupId, STREAM_BASE_C);
     }
 
-    private List<VideoVO> list(DataScope scope, String streamBase) {
+    private List<VideoVO> list(DataScope scope, Long groupId, String streamBase) {
         DataPartition partition = DataPartition.forRequest(scope);
-        List<FileObjectDO> rows = fileObjectMapper.selectList(videoQuery(partition)
-                .orderByDesc(FileObjectDO::getId));
-        return rows.stream().map(record -> toVO(record, streamBase)).toList();
+        LambdaQueryWrapper<FileObjectDO> wrapper = videoQuery(partition);
+        if (groupId != null) {
+            fileGroupService.requireGroupInScope(groupId, BIZ_TYPE_VIDEO, scope);
+            wrapper.exists("SELECT 1 FROM file_group_rel rel WHERE rel.file_id = file_object.id"
+                    + " AND rel.group_id = {0}", groupId);
+        }
+        List<FileObjectDO> rows = fileObjectMapper.selectList(wrapper.orderByDesc(FileObjectDO::getId));
+        if (rows.isEmpty()) {
+            return List.of();
+        }
+        List<Long> fileIds = rows.stream().map(FileObjectDO::getId).toList();
+        Map<Long, List<Long>> groupIdsByFile = fileGroupService.groupIdsByFile(BIZ_TYPE_VIDEO, partition, fileIds);
+        Map<Long, String> groupNames = fileGroupService.groupNameMap(BIZ_TYPE_VIDEO, partition);
+        return rows.stream().map(record -> {
+            VideoVO vo = toVO(record, streamBase);
+            List<Long> ids = groupIdsByFile.getOrDefault(record.getId(), List.of());
+            vo.setGroupIds(ids);
+            vo.setGroupNames(ids.stream().map(groupNames::get).filter(Objects::nonNull).toList());
+            return vo;
+        }).toList();
     }
 
     /**
@@ -99,7 +119,7 @@ public class VideoService {
      * 落库失败由 {@link FileStorageWriter#writeVideoStream} 注册的回滚回调清掉刚写的文件。
      */
     @Transactional
-    public VideoVO upload(MultipartFile file, DataScope scope) {
+    public VideoVO upload(MultipartFile file, List<Long> groupIds, DataScope scope) {
         DataPartition partition = DataPartition.forRequest(scope);
         String originName = file.getOriginalFilename();
         VideoType type = VideoType.resolve(originName);
@@ -130,10 +150,16 @@ public class VideoService {
         record.setCreatorId(CurrentUserHolder.requireUserId());
         try {
             fileObjectMapper.insert(record);
-            log.info("视频上传完成: id={}, name={}, ext={}, size={}, scope={}, ownerId={}",
+            List<Long> boundGroupIds = fileGroupService.bindNewFile(
+                    record.getId(), groupIds, BIZ_TYPE_VIDEO, partition);
+            log.info("视频上传完成: id={}, name={}, ext={}, size={}, scope={}, ownerId={}, groupIds={}",
                     record.getId(), originName, type.ext(), file.getSize(),
-                    partition.scope(), partition.ownerId());
-            return toVO(requireVideo(record.getId(), partition), STREAM_BASE_B);
+                    partition.scope(), partition.ownerId(), boundGroupIds);
+            VideoVO vo = toVO(requireVideo(record.getId(), partition), STREAM_BASE_B);
+            Map<Long, String> groupNames = fileGroupService.groupNameMap(BIZ_TYPE_VIDEO, partition);
+            vo.setGroupIds(boundGroupIds);
+            vo.setGroupNames(boundGroupIds.stream().map(groupNames::get).filter(Objects::nonNull).toList());
+            return vo;
         } catch (RuntimeException e) {
             storageWriter.discard(written.getFileKey(), null);
             throw e;
@@ -144,6 +170,8 @@ public class VideoService {
     @Transactional
     public void delete(Long id, DataScope scope) {
         FileObjectDO record = requireVideo(id, DataPartition.forRequest(scope));
+        // file_object 是软删（行仍在），file_group_rel 的外键级联不会触发，必须显式清掉本视频的分组关联行。
+        fileGroupService.deleteFileRelations(id);
         fileFacade.markDeletedAndPurge(List.of(id));
         log.info("删除视频: id={}, name={}", id, record.getOriginName());
     }

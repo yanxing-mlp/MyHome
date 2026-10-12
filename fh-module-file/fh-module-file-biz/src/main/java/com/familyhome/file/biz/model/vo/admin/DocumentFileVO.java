@@ -2,6 +2,7 @@ package com.familyhome.file.biz.model.vo.admin;
 
 import com.familyhome.common.enums.DataScope;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -24,6 +25,15 @@ public class DocumentFileVO {
 
     /** 分类名；分类被删时为空，前端按"未分类"兜底展示 */
     private String categoryName;
+
+    /**
+     * 所属分组 id（可属于多个分组）。分组与分类<b>并存</b>：分类是"文档/数据/其他"这类类型标签，
+     * 分组是用户自建的两级归类（分组列表 → 点进看内容）。空数组=未分组，只出现在「全部文件」里。
+     */
+    private List<Long> groupIds;
+
+    /** 所属分组名，与 {@link #groupIds} 一一对应（顺序一致），前端直接展示、无需再查字典 */
+    private List<String> groupNames;
 
     /** 文件类型：CSV / MD / DOC / DOCX，上传时由服务端解析，不是前端传的 */
     private String fileType;

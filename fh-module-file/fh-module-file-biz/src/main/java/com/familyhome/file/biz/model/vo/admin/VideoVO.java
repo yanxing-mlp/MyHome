@@ -2,6 +2,7 @@ package com.familyhome.file.biz.model.vo.admin;
 
 import com.familyhome.common.enums.DataScope;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -20,6 +21,15 @@ public class VideoVO {
 
     /** 视频名（上传时的原始文件名，含扩展名） */
     private String name;
+
+    /**
+     * 所属分组 id（可属于多个分组）。空数组=未分组，只出现在「全部视频」里。
+     * 视频没有分类字典，分组是它唯一的归类维度。
+     */
+    private List<Long> groupIds;
+
+    /** 所属分组名，与 {@link #groupIds} 顺序一致，前端直接展示 */
+    private List<String> groupNames;
 
     /** 类型列：扩展名大写，如 MP4 / MOV */
     private String fileType;

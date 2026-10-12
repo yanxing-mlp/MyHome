@@ -39,6 +39,10 @@ public final class ErrorCode {
     public static final String FILE_CATEGORY_NOT_FOUND = "FILE_CATEGORY_NOT_FOUND";
     /** 分类重名（uk_name），对应 HTTP 409 */
     public static final String FILE_CATEGORY_NAME_DUPLICATED = "FILE_CATEGORY_NAME_DUPLICATED";
+    /** 文件/视频分组不存在或不属于当前分区，对应 HTTP 404 */
+    public static final String FILE_GROUP_NOT_FOUND = "FILE_GROUP_NOT_FOUND";
+    /** 文件/视频分组重名（同 biz_type + 同分区），对应 HTTP 409 */
+    public static final String FILE_GROUP_NAME_DUPLICATED = "FILE_GROUP_NAME_DUPLICATED";
 
     // ===== album 域 =====
     public static final String ALBUM_GROUP_NOT_FOUND = "ALBUM_GROUP_NOT_FOUND";

@@ -119,6 +119,7 @@ file -> V1xx    album -> V2xx    recipe -> V3xx    vault -> V4xx    user -> V5xx
 - **v14 / V211 不只是加默认值**：给 `album_image`、`album_city` 加 `scope + owner_id`，按家庭（owner=0）与个人账号拆历史共享 image，并重连 `album_image_group_rel`；同 owner 多组仍只保留一行。保留城市/EXIF/状态/置顶、真实上传人、创建及更新时间；已删组的私人图片也保留 owner，不转为家庭。拆行暂共享 fileId，删除路径必须先检查全 album 未删除图片的活引用，保护另一侧文件。城市按分区重建，后续只重算当前分区。独立 MySQL 测试库执行 V211 的 12 项断言已通过，**不等同于本地启动或浏览器验收**。
 - 文档不另建业务表：元数据 `file_object` 全都有，用 `biz_type = document` 与图片行区分，文件类型看 `ext` 就够
 - **视频也不另建业务表**（2026-09-23）：同文档，用 `biz_type = 'video'` 与图片/文档行区分。视频相对文档没有多出来的业务语义（元数据 `file_object` 全都有），所以唯一要动的是 V106 那条只放行 `document` 进 PRIVATE 的 CHECK——**`V107`（file 号段）`DROP chk_file_object_private_document` 换成 `chk_file_object_private_partition CHECK (scope='PUBLIC' OR BINARY biz_type IN ('document','video'))`**，让私人视频落得下；图片行恒 PUBLIC/0，不受影响。应用时 MySQL 会报一句 `'BINARY expr' is deprecated` 的良性 warning，迁移 `success=1`，已应用的迁移绝不回头改。**视频没有走 V600**（那是早期计划的号段，实际落在 file 号段的 V107）
+- **文件/视频分组是两张新表**（2026-10-12，file 号段 head 到 `V109`）：`V108` 建 `file_group`（一张表靠 `biz_type='document'/'video'` 区分两类分组，硬删 + `uk_file_group_name(biz_type,scope,owner_id,unique_name)`，同 `file_category` 字典口径而非 `file_object` 的两态 `deleted`），`V109` 建 `file_group_rel`（`file_id`→`file_object.id`、`group_id`→`file_group.id`，两个外键都 `ON DELETE CASCADE`）。⚠️ `group_id` 级联在删组时生效；但 `file_id` 级联删文档/视频时**不触发**（`file_object` 软删、行还在），故服务层必须显式硬删关联行。详见「文件与视频分组」一节
 - `out-of-order: true` 是号段方案的必要配套，不是配置错误
 - **每张表都必须同时有 `create_time` 和 `update_time`**，关联表（`*_rel`）、明细表（`recipe_order_item`）、字典子表也不例外，统一用
   `DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3)` / 再加 `ON UPDATE CURRENT_TIMESTAMP(3)`；实体 DO 同步映射这两个字段，插入时不用手工赋值（MP 默认不写 null 列，交给 DB）。
@@ -258,6 +259,16 @@ B 端「视频管理」下设公共视频 / 个人视频，与密码本/文件�
 
 **C 端验收（2026-09-23，浏览器 + curl，全绿）**：h5 首页两入口（家庭视频/私人视频）渲染；家庭视频列表显示 PUBLIC 测试片（`WEBM · 2.1 KB`，`formatFileSize` 口径正确），点开原生 `<video>` 浮层播放，`readyState=4`、解码出 320×240 真实帧、`videoError=null`，stream 请求 `206 video/webm`；私人视频对 大宝 显示其 PRIVATE 片并经 `PRIVATE.ownerId=1` 票据出流 `206`，对 小宝 显示空态（隔离）；curl 侧：C 列表 PUBLIC/PRIVATE 按 scope 分流、小宝 PRIVATE 空、stream 全量 `200`（`Accept-Ranges/inline/no-store/nosniff/video/webm`）+ Range `206 Content-Range`、无 ticket `400`、伪造 ticket `403`、无令牌列表 `401`。测试片两支已删（C 列表归 0、磁盘 0 webm、无孤儿文件）。**注**：浏览器 `MediaRecorder` 造的 webm 缺 duration 元数据（`video.duration≈0.001`）是测试片本身的产物，不是播放链路问题——`readyState=4` + 解码出真实帧 + Range 206 已证明流服务合法媒体。
 
+## 文件与视频分组（2026-10-12）
+
+「文件管理」「视频管理」从一层平铺列表升级为**两级：分组列表 → 点进看内容**（参照相册）。分组与分类**并存**——文档保留原有 `file_category`（类型标签）另加分组，视频只加分组；一个文件/视频**可属于多个分组**（多对多）；上传时分组**可选，留空 = 未分组**，未分组只出现在「全部」里。C 端视频分组只读（文档不下沉 C 端）。
+
+**一张表服务两类分组（`V108` `file_group` + `V109` `file_group_rel`）**：靠必传的 `biz_type`（`document`/`video`）区分文件分组与视频分组，两页各自一套、互不串。`file_group_rel.file_id` 指向 `file_object.id`（文档/视频没有独立业务表，这正是它与相册 `album_image_group_rel` 指向 `album_image.id` 的差异）。分区沿用文档/视频那一套（`DataScope.PUBLIC/PRIVATE` + `DataPartition.forRequest`，PUBLIC owner=0、PRIVATE 当前账号、ADMIN 无例外、跨区裸 id 404）。**分组硬删除**（与 `file_category` 字典一致，不用 `file_object` 的两态 `deleted`、也不做相册的三态 `status` 上下架——分组没有上下架概念）：删组时靠 `file_group_rel.group_id` 外键 `ON DELETE CASCADE` 自动清关联行；名称唯一性 = 同 `biz_type` + 同分区（`uk_file_group_name`），删除后同名可重建。⚠️ `file_id` 外键虽也声明级联，但删文档/视频时**不会**触发（`file_object` 是软删、行还在），所以 `DocumentFileService.delete`/`VideoService.delete` 必须显式硬删本文件的关联行。两表均带 `create_time`+`update_time`（服务端不注册 `MetaObjectHandler`，全靠 DDL 默认值）。
+
+**六条 B 端接口（`FileGroupController`，`/api/b/file/groups`）**：全部必带 `bizType` + `scope`（缺省 PUBLIC）——`GET`（全量列表不分页，带组内文件数）、`POST`（新建，同分区同类重名 409）、`PUT /{id}`（改名）、`PUT /sort`（拖拽整批重排，整批校验后才写）、`DELETE /{id}`（删组，关联行外键级联）、`PUT /files/{fileId}`（body `{groupIds}`，整组覆盖一个文件/视频的分组归属，空数组 = 移出所有分组回到未分组）。去重预检 `DuplicateValidationController` 加 `FILE_GROUP` kind + `bizType` 字段。文档/视频列表接口（`/api/b/file/documents`、`/api/b/video`）的返回体加了 `groupIds`/`groups`，`POST` 上传也接受可选的分组绑定。
+
+**验收（2026-10-12，浏览器 + curl，全绿）**：V108/V109 迁移成功、jar 重启到 head v109；curl 建视频组/文件组、去重 true/false、上传两支（一支绑组、一支未分组），B 端全部/按组、C 端全部/按组/分组计数逐条核对；admin 浏览器实测两级页 + 两域子菜单，h5 实测 `/video` → 组详情 → 全部视频。测试数据全清（视频/分组经 API 删除，`file_group`/`file_group_rel` 归 0、外键级联生效，临时文件移除）。**边界**：分组硬删（删组即清关联）；未分组不是真分组、无 id，只在「全部」里出现；C 端只读，分组管理仍只在 B 端。
+
 ## C 端接口（`/api/c/**`，2026-09-21 起）
 
 C 端（h5）不再打任何 `/api/b/**`。每个域在 `controller/c/` 里有一个独立的 `@RestController`，**只做路径与返回体的裁剪，业务全在同一套 service 上**——不是转发层，也没有第二份实现。搬家的判据只有一条：**`controller/b/` 里还有没有 B 端调用方**；没有就整条挪走（B 端留着一条没人调的路径，等于给 §8.3 那条内网白名单多开一扇公网用不到的门）。
@@ -270,7 +281,8 @@ C 端（h5）不再打任何 `/api/b/**`。每个域在 `controller/c/` 里有�
 |  | `GET /api/c/album/images` | query.scope 默认 FAMILY，另收 groupId/ungrouped/pageNo/pageSize（默认 9，上限 100），不开放 status；只读同分区在架图，返回 `PageResult<AlbumImageBriefVO>`（id/fileId/url/thumbUrl）。groupId 先验分区/属主与上架状态：不存在、已删除、下架、跨区、别人私人或无身份私人裸 ID 均 **404**。无 groupId 且 ungrouped 非 true 返回 **400**，无全库读取；ungrouped=true 仅 FAMILY 的零关联在架图，PERSONAL 不支持 |
 |  | `POST /api/c/album/groups/{groupId}/images` | query.scope 默认 FAMILY + `{items:[{fileId,city,lng,lat,shootTime}]}`；先验分组可见性（同上，越界/不可见 404），再要求写入身份并全批校验文件。新 file 必须本人上传，另一 scope 已用 fileId 要重传；组内 md5 去重，仅同分区复用 image、禁止跨区关联。EXIF 随新 image 行落库，城市只重算本分区 |
 | 文件 | `POST /api/c/file/upload` | 两个 part（`file` + `bizType`），返回完整 `FileDTO`，C 端只用 `id` 去绑分组。B 端的文件管理（分类字典、文档列表/删除、`storage-info`）这里一概没有 |
-| 视频 | `GET /api/c/video` | query `scope` 缺省 PUBLIC，返回裁剪过的 `VideoClientVO`（`id/name/fileType/fileSize/playUrl`），每行 `playUrl` 是 `/api/c/video/{id}/stream?ticket=...`（C 基址，票据与 B 端同一套）。PUBLIC 全家可见、PRIVATE 仅当前账号，无身份 401、跨区裸 ID 404。**C 端只读**：没有上传/删除接口（h5 只能看不能改），上传/删除仍只有 B 端 `/api/b/video` |
+| 视频 | `GET /api/c/video/groups` | query `scope` 缺省 PUBLIC，返回 `VideoGroupClientVO{groupId,name,videoCount}` 全量数组（2026-10-12 加分组时新增）。C 端一级页据此渲染分组卡；未分组不做减法（多对多下各组计数有重叠），由前端常驻一张「全部视频」卡兜住未分组的可达性 |
+|  | `GET /api/c/video` | query `scope` 缺省 PUBLIC，可选 `groupId`（2026-10-12 加，缺省 = 全部含未分组，传值 = 只该组），返回裁剪过的 `VideoClientVO`（`id/name/fileType/fileSize/playUrl`），每行 `playUrl` 是 `/api/c/video/{id}/stream?ticket=...`（C 基址，票据与 B 端同一套）。PUBLIC 全家可见、PRIVATE 仅当前账号，无身份 401、跨区裸 ID 404。**C 端只读**：没有上传/删除接口（h5 只能看不能改），上传/删除仍只有 B 端 `/api/b/video` |
 |  | `GET /api/c/video/{id}/stream` | 播放流，`?ticket=` 鉴权（唯一不验登录令牌的一条，同 B 端），支持 HTTP Range/206，直接复用 `videoService.stream` |
 | 菜谱 | `GET /api/c/recipe/categories` · `/practices` | 分类字典、做法分组+选项，都是全量 |
 |  | `GET /api/c/recipe/recipes` | 点餐页菜品列表，**一次全量、只返回在架**（`recipeService.listOnShelf()`）。B 端菜谱管理页那条要翻页和筛选，走 `/api/b` |

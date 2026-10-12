@@ -56,7 +56,8 @@ public class GlobalExceptionHandler {
             "uk_user_live_name", new DuplicateFailure(ErrorCode.USER_NAME_DUPLICATED, "已有同名账号"),
             "uk_user_live_phone", new DuplicateFailure(ErrorCode.USER_PHONE_DUPLICATED, "该手机号已被其他账号使用"),
             "uk_vault_live_entry", new DuplicateFailure(ErrorCode.VAULT_ACCOUNT_DUPLICATED, "密码本中已有相同名称和账号的条目"),
-            "uk_file_category_name", new DuplicateFailure(ErrorCode.FILE_CATEGORY_NAME_DUPLICATED, "已有同名文件分类"));
+            "uk_file_category_name", new DuplicateFailure(ErrorCode.FILE_CATEGORY_NAME_DUPLICATED, "已有同名文件分类"),
+            "uk_file_group_name", new DuplicateFailure(ErrorCode.FILE_GROUP_NAME_DUPLICATED, "当前范围已有同名分组"));
 
     /** 并发写入最终由数据库裁决；绝不输出包含手机号/账号值及 SQL 的异常原文。 */
     @ExceptionHandler(DuplicateKeyException.class)

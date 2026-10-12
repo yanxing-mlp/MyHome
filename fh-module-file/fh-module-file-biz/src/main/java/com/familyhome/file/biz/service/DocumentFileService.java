@@ -54,6 +54,7 @@ public class DocumentFileService {
 
     private final FileObjectMapper fileObjectMapper;
     private final FileCategoryService categoryService;
+    private final FileGroupService fileGroupService;
     private final FileStorageWriter storageWriter;
     private final FileFacade fileFacade;
     private final FileStorageConfig config;
@@ -62,13 +63,19 @@ public class DocumentFileService {
      * 列表：最近上传的在前，不分页（家庭量级，一期就几十份）。
      *
      * @param categoryId null = 全部分类
+     * @param groupId    null = 不按分组过滤（「全部文件」）；非 null 时只列属于该分组的文档（分组详情页）
      */
-    public List<DocumentFileVO> list(Long categoryId, DataScope scope) {
+    public List<DocumentFileVO> list(Long categoryId, Long groupId, DataScope scope) {
         DataPartition partition = DataPartition.forRequest(scope);
         LambdaQueryWrapper<FileObjectDO> wrapper = documentQuery(partition);
         if (categoryId != null) {
             categoryService.require(categoryId, partition);
             wrapper.eq(FileObjectDO::getCategoryId, categoryId);
+        }
+        if (groupId != null) {
+            fileGroupService.requireGroupInScope(groupId, BIZ_TYPE_DOCUMENT, scope);
+            wrapper.exists("SELECT 1 FROM file_group_rel rel WHERE rel.file_id = file_object.id"
+                    + " AND rel.group_id = {0}", groupId);
         }
         wrapper.orderByDesc(FileObjectDO::getId);
 
@@ -77,7 +84,19 @@ public class DocumentFileService {
             return List.of();
         }
         Map<Long, String> categoryNames = categoryService.nameMap(partition);
-        return rows.stream().map(row -> toVO(row, categoryNames)).toList();
+        List<Long> fileIds = rows.stream().map(FileObjectDO::getId).toList();
+        Map<Long, List<Long>> groupIdsByFile = fileGroupService.groupIdsByFile(BIZ_TYPE_DOCUMENT, partition, fileIds);
+        Map<Long, String> groupNames = fileGroupService.groupNameMap(BIZ_TYPE_DOCUMENT, partition);
+        return rows.stream().map(row -> enrich(toVO(row, categoryNames), groupIdsByFile, groupNames)).toList();
+    }
+
+    /** 把分组归属填进 VO：groupIds 与 groupNames 顺序一致，前端直接展示。 */
+    private DocumentFileVO enrich(DocumentFileVO vo, Map<Long, List<Long>> groupIdsByFile,
+                                  Map<Long, String> groupNames) {
+        List<Long> ids = groupIdsByFile.getOrDefault(vo.getId(), List.of());
+        vo.setGroupIds(ids);
+        vo.setGroupNames(ids.stream().map(groupNames::get).filter(java.util.Objects::nonNull).toList());
+        return vo;
     }
 
     /**
@@ -88,9 +107,10 @@ public class DocumentFileService {
      *
      * @param file       文件本体
      * @param categoryId 分类，必选
+     * @param groupIds   初始所属分组，可空（留空=未分组，只出现在「全部文件」里）
      */
     @Transactional
-    public DocumentFileVO upload(MultipartFile file, Long categoryId, DataScope scope) {
+    public DocumentFileVO upload(MultipartFile file, Long categoryId, List<Long> groupIds, DataScope scope) {
         DataPartition partition = DataPartition.forRequest(scope);
         categoryService.require(categoryId, partition);
 
@@ -124,11 +144,19 @@ public class DocumentFileService {
         record.setCreatorId(CurrentUserHolder.requireUserId());
         try {
             fileObjectMapper.insert(record);
+            List<Long> boundGroupIds = fileGroupService.bindNewFile(
+                    record.getId(), groupIds, BIZ_TYPE_DOCUMENT, partition);
 
-            log.info("文档上传完成: id={}, name={}, ext={}, size={}, categoryId={}, duplicated={}",
-                    record.getId(), originName, type.ext(), bytes.length, categoryId, written.isDuplicated());
+            log.info("文档上传完成: id={}, name={}, ext={}, size={}, categoryId={}, groupIds={}, duplicated={}",
+                    record.getId(), originName, type.ext(), bytes.length, categoryId, boundGroupIds,
+                    written.isDuplicated());
             // DB 默认时间需要回读；仍按当前文档分区查询。
-            return toVO(requireDocument(record.getId(), partition), categoryService.nameMap(partition));
+            DocumentFileVO vo = toVO(requireDocument(record.getId(), partition), categoryService.nameMap(partition));
+            Map<Long, String> groupNames = fileGroupService.groupNameMap(BIZ_TYPE_DOCUMENT, partition);
+            vo.setGroupIds(boundGroupIds);
+            vo.setGroupNames(boundGroupIds.stream().map(groupNames::get)
+                    .filter(java.util.Objects::nonNull).toList());
+            return vo;
         } catch (RuntimeException e) {
             storageWriter.discard(written.getFileKey(), written.getThumbKey());
             throw e;
@@ -143,6 +171,8 @@ public class DocumentFileService {
     @Transactional
     public void delete(Long id, DataScope scope) {
         FileObjectDO record = requireDocument(id, DataPartition.forRequest(scope));
+        // file_object 是软删（行仍在），file_group_rel 的外键级联不会触发，必须显式清掉本文件的分组关联行。
+        fileGroupService.deleteFileRelations(id);
         fileFacade.markDeletedAndPurge(List.of(id));
         log.info("删除文档文件: id={}, name={}", id, record.getOriginName());
     }

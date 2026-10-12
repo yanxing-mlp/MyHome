@@ -36,21 +36,23 @@ public class DocumentFileController {
 
     private final DocumentFileService documentFileService;
 
-    /** 列表，最近上传在前；categoryId 不传 = 全部 */
+    /** 列表，最近上传在前；categoryId 不传 = 全部分类，groupId 不传 = 不按分组过滤（「全部文件」） */
     @GetMapping
     public Result<List<DocumentFileVO>> list(
             @RequestParam(required = false) Long categoryId,
+            @RequestParam(required = false) Long groupId,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
-        return Result.ok(documentFileService.list(categoryId, scope));
+        return Result.ok(documentFileService.list(categoryId, groupId, scope));
     }
 
     /**
      * 上传一份文档。
      *
-     * <p>multipart/form-data：{@code file} 文件本体，{@code categoryId} 分类（必选）。
-     * 类型（扩展名 + mime）由服务端按文件名解析，前端不用传、也不能传。
+     * <p>multipart/form-data：{@code file} 文件本体，{@code categoryId} 分类（必选），
+     * {@code groupIds} 初始所属分组（可选，留空=未分组）。类型（扩展名 + mime）由服务端按文件名解析，
+     * 前端不用传、也不能传。
      *
-     * <p>categoryId 用 {@code @RequestParam} 而不是 {@code @RequestPart}：后者对非字符串
+     * <p>categoryId / groupIds 用 {@code @RequestParam} 而不是 {@code @RequestPart}：后者对非字符串
      * 参数会走 HttpMessageConverter 读 part，而表单 part 没有 Content-Type（默认
      * application/octet-stream），没有转换器接手 → 直接 500。文件本体仍用 {@code @RequestPart}，
      * 与图片上传接口保持一致。
@@ -59,8 +61,9 @@ public class DocumentFileController {
     public Result<DocumentFileVO> upload(
             @RequestPart("file") MultipartFile file,
             @RequestParam("categoryId") Long categoryId,
+            @RequestParam(name = "groupIds", required = false) List<Long> groupIds,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
-        return Result.ok(documentFileService.upload(file, categoryId, scope));
+        return Result.ok(documentFileService.upload(file, categoryId, groupIds, scope));
     }
 
     /** 删除（软删记录 + 物理删文件） */

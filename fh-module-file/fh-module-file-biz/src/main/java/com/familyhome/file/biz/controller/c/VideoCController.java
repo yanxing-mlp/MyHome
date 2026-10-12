@@ -4,6 +4,8 @@ import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.Result;
 import com.familyhome.file.biz.model.vo.admin.VideoVO;
 import com.familyhome.file.biz.model.vo.client.VideoClientVO;
+import com.familyhome.file.biz.model.vo.client.VideoGroupClientVO;
+import com.familyhome.file.biz.service.FileGroupService;
 import com.familyhome.file.biz.service.VideoService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -36,12 +38,35 @@ import org.springframework.web.bind.annotation.RestController;
 public class VideoCController {
 
     private final VideoService videoService;
+    private final FileGroupService fileGroupService;
 
-    /** 列表：最近上传在前，每行带一枚指向 C 端播放流的短时签名票据；裁成 C 端只读视图。 */
+    /**
+     * 视频分组卡片列表（两级展示的第一级）：C 端只读，只给名字 + 数量，不含内部字段。
+     *
+     * <p>分组没有上下架，所以这里就是当前分区的全部视频分组；点进某组再走 {@code GET /api/c/video?groupId=}。
+     */
+    @GetMapping("/groups")
+    public Result<List<VideoGroupClientVO>> groups(
+            @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        List<VideoGroupClientVO> list = fileGroupService
+                .list(FileGroupService.BIZ_VIDEO, null, scope).stream()
+                .map(g -> {
+                    VideoGroupClientVO vo = new VideoGroupClientVO();
+                    vo.setGroupId(g.getId());
+                    vo.setName(g.getName());
+                    vo.setVideoCount(g.getFileCount());
+                    return vo;
+                })
+                .toList();
+        return Result.ok(list);
+    }
+
+    /** 列表：最近上传在前，每行带一枚指向 C 端播放流的短时签名票据；裁成 C 端只读视图。groupId 不传 = 全部视频。 */
     @GetMapping
     public Result<List<VideoClientVO>> list(
+            @RequestParam(required = false) Long groupId,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
-        List<VideoClientVO> list = videoService.listForClient(scope).stream()
+        List<VideoClientVO> list = videoService.listForClient(scope, groupId).stream()
                 .map(VideoCController::toClientVO)
                 .toList();
         return Result.ok(list);
