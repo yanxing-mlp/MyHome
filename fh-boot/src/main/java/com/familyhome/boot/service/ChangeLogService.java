@@ -133,6 +133,12 @@ public class ChangeLogService {
                 }
             }
             repoNode.put("source", source);
+            // 当前运行版本：始终取构建期快照顶部那条 commit（打包时的 HEAD，也就是这份产物编译自哪个 commit）。
+            // 与列表来源无关——无论本页是实时还是快照兜底，跑着的都是烘进 JAR 那一刻的 commit。
+            String runningCommit = runningCommitFromSnapshot(snapshot, spec);
+            if (runningCommit != null) {
+                repoNode.put("runningCommit", runningCommit);
+            }
             repos.add(repoNode);
         }
 
@@ -232,6 +238,36 @@ public class ChangeLogService {
             if (spec.key().equals(repo.path("key").asText(""))) {
                 return repo.deepCopy();
             }
+        }
+        return null;
+    }
+
+    /**
+     * 当前运行版本 = 构建期快照里本仓最新那条 commit 的完整 hash。
+     *
+     * <p>快照是打包前 {@code gen-change-log.py} 从两仓 HEAD 现采的，顶部第一条就是编译这份产物时的 HEAD，
+     * 也就是「系统当前跑的是哪个变更」的真值。它只依赖 classpath 里烘死的快照，**与本页列表是实时还是兜底无关**：
+     * 实时列表里可能有比它更新的提交（已 push 但没重新打包部署），那些都不算「运行中」。
+     * 拿不到（无快照 / 该仓无提交）就返回 null，前端不显示运行版本标记。
+     */
+    private String runningCommitFromSnapshot(JsonNode snapshot, RepoSpec spec) {
+        if (snapshot == null) {
+            return null;
+        }
+        JsonNode repos = snapshot.path("repositories");
+        if (!repos.isArray()) {
+            return null;
+        }
+        for (JsonNode repo : repos) {
+            if (!spec.key().equals(repo.path("key").asText(""))) {
+                continue;
+            }
+            JsonNode commits = repo.path("commits");
+            if (commits.isArray() && !commits.isEmpty()) {
+                String hash = commits.get(0).path("hash").asText("");
+                return hash.isEmpty() ? null : hash;
+            }
+            return null;
         }
         return null;
     }
