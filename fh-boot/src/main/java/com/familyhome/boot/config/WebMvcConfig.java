@@ -2,11 +2,12 @@ package com.familyhome.boot.config;
 
 import com.familyhome.file.biz.config.FileStorageConfig;
 import java.io.IOException;
-import java.nio.file.Paths;
+import java.nio.file.Files;
+import java.nio.file.Path;
 import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.io.FileSystemResource;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.core.io.Resource;
 import org.springframework.http.CacheControl;
@@ -29,24 +30,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
     /** 认"现在是谁"的那一层，见 {@link CurrentUserInterceptor}；它自己带上了所需的服务。 */
     private final CurrentUserInterceptor currentUserInterceptor;
 
-    @Value("${fh.storage.root}")
-    private String storageRoot;
-
-    @Value("${fh.storage.url-prefix}")
-    private String urlPrefix;
+    private final FileStorageConfig storageConfig;
 
     /**
-     * 把 {@code /files/**} 映射到本地存储根目录。
-     *
-     * <p>生产环境 nginx 会直接 {@code alias} 读盘绕过 Java 进程，两者路径规则一致，切换无感（方案 §6.4）。
-     *
-     * <p>缓存策略设为一年 + immutable：文件名带 UUID，内容永不变，可以放心永久缓存。
+     * 统一按持久化目录标识路由；nginx 必须反代 /files，不能 alias 到单一默认目录。
+     * 文件名带 UUID，仍沿用一年 immutable 缓存，旧 URL 不变。
      */
     @Override
     public void addResourceHandlers(ResourceHandlerRegistry registry) {
-        String absoluteRoot = Paths.get(storageRoot).toAbsolutePath().normalize().toString();
-        String location = "file:" + absoluteRoot + "/";
-        String pattern = urlPrefix + "/**";
+        String location = Path.of(storageConfig.getRoot()).toUri().toString();
+        if (!location.endsWith("/")) location += "/";
+        String pattern = storageConfig.getUrlPrefix() + "/**";
 
         registry.addResourceHandler(pattern)
                 .addResourceLocations(location)
@@ -60,11 +54,17 @@ public class WebMvcConfig implements WebMvcConfigurer {
                         if (FileStorageConfig.privatePrefixOf(resourcePath) != null) {
                             return null;
                         }
-                        return super.getResource(resourcePath, location);
+                        try {
+                            Path path = storageConfig.resolvePath(resourcePath);
+                            return Files.isRegularFile(path) && Files.isReadable(path)
+                                    ? new FileSystemResource(path) : null;
+                        } catch (IllegalArgumentException | SecurityException e) {
+                            return null;
+                        }
                     }
                 });
 
-        log.info("静态资源映射: {} -> {}", pattern, location);
+        log.info("静态资源映射: {} -> 已注册存储目录", pattern);
     }
 
     /**

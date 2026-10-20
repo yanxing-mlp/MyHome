@@ -24,7 +24,11 @@ public class LocalStorageClient implements StorageClient {
 
     public LocalStorageClient(FileStorageConfig config) {
         this.config = config;
-        // 私人目录与公共静态根并列，不能被 /files/** 映射访问。
+        // 注册目录只能由注册流程创建；重启时不能在掉线的挂载点重建空目录。
+        if (config.isManaged()) {
+            return;
+        }
+        // 无 Spring 容器的独立调用保留原行为。
         try {
             Path publicRoot = Path.of(config.getRoot());
             Path privateRoot = config.getPrivateRoot();

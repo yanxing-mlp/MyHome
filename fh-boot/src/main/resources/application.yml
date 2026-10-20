@@ -88,3 +88,13 @@ fh:
   # 生成方式：openssl rand -hex 16
   transport-crypto:
     salt: ""
+
+  # 变更记录（v39）。默认「实时优先 + 烘焙快照兜底」：起服务后先去 GitHub 拉当前分支最近一页提交，
+  # 拉不到（断网/限流/超时）才回退到构建期 gen-change-log.py 烘进 classpath 的 git/change-log.json。
+  # 离线目标机断网：把 github-enabled 置 false，直接只读快照，省掉每次刷新都等一次网络超时。
+  change-log:
+    github-enabled: true
+    github-api-base: https://api.github.com
+    timeout-seconds: 8
+    # 两仓都是公开库，匿名拉取受 GitHub 60 次/小时/IP 限制，靠短缓存挡住高频刷新。
+    cache-seconds: 60

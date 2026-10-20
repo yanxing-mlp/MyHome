@@ -37,6 +37,7 @@ public class FileStorageWriter {
 
     private final StorageClient storageClient;
     private final FileObjectMapper fileObjectMapper;
+    private final FileStorageConfig config;
 
     private static final DateTimeFormatter DATE_PATH = DateTimeFormatter.ofPattern("yyyy/MM/dd");
 
@@ -95,9 +96,9 @@ public class FileStorageWriter {
         if (!partition.equals(DataPartition.forRequest(partition.scope()))) {
             throw new IllegalArgumentException("不能写入其他账号的视频分区");
         }
-        String directory = (partition.scope() == DataScope.PRIVATE
+        String directory = config.directoryForUpload((partition.scope() == DataScope.PRIVATE
                 ? FileStorageConfig.PRIVATE_VIDEO_PREFIX + partition.ownerId() + "/" : "videos/")
-                + LocalDate.now().format(DATE_PATH);
+                + LocalDate.now().format(DATE_PATH));
         String uuid = UUID.randomUUID().toString();
         String fileKey = directory + "/" + uuid + (ext == null || ext.isEmpty() ? "" : "." + ext);
 
@@ -123,9 +124,9 @@ public class FileStorageWriter {
 
     private Written write(byte[] bytes, String ext, DataPartition partition) {
         String md5 = calculateMd5(bytes);
-        String directory = (partition.scope() == DataScope.PRIVATE
+        String directory = config.directoryForUpload((partition.scope() == DataScope.PRIVATE
                 ? FileStorageConfig.PRIVATE_DOCUMENT_PREFIX + partition.ownerId() + "/" : "")
-                + LocalDate.now().format(DATE_PATH);
+                + LocalDate.now().format(DATE_PATH));
         String uuid = UUID.randomUUID().toString();
         String fileKey = directory + "/" + uuid + (ext == null || ext.isEmpty() ? "" : "." + ext);
         String thumbKey = directory + "/" + uuid + "_t.jpg";

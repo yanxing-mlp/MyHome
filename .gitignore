@@ -25,3 +25,6 @@ logs/
 application-local.yml
 application-local.yaml
 application-local.properties
+
+# 构建期生成的「变更记录」快照（由 scripts/gen-change-log.py 产出，随后端 JAR 发布）
+fh-boot/src/main/resources/git/change-log.json

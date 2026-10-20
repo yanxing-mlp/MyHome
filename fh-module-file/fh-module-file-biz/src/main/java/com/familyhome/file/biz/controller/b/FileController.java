@@ -5,6 +5,7 @@ import com.familyhome.file.api.FileFacade;
 import com.familyhome.file.api.FileUploadRequest;
 import com.familyhome.file.api.dto.FileDTO;
 import com.familyhome.file.biz.config.FileStorageConfig;
+import com.familyhome.file.biz.storage.StorageDirectoryRegistry;
 import jakarta.validation.constraints.NotBlank;
 import java.io.IOException;
 import java.util.HashMap;
@@ -32,6 +33,7 @@ public class FileController {
 
     private final FileFacade fileFacade;
     private final FileStorageConfig storageConfig;
+    private final StorageDirectoryRegistry directoryRegistry;
 
     /**
      * 单文件上传。
@@ -74,10 +76,13 @@ public class FileController {
      */
     @GetMapping("/storage-info")
     public Result<Map<String, String>> getStorageInfo() {
+        var snapshot = directoryRegistry.listForAdmin();
+        var current = snapshot.directories().stream().filter(StorageDirectoryRegistry.DirectoryStatus::isDefault)
+                .findFirst().orElseThrow();
         Map<String, String> info = new HashMap<>();
-        info.put("rootDirectory", storageConfig.getRoot());
+        info.put("rootDirectory", current.path());
         info.put("urlPrefix", storageConfig.getUrlPrefix());
-        info.put("structure", "root/yyyy/MM/dd/{uuid}.jpg");
+        info.put("structure", "新上传按默认目录/yyyy/MM/dd/保存；历史文件保留原目录");
         return Result.ok(info);
     }
 }
