@@ -86,6 +86,14 @@ fh:
     root: /data/family-home/files
     url-prefix: /files
 
+  # 单端口托管前端（Topology A，方案 v57）。部署机不再跑 Vite dev server：由本进程把两份**已构建**的
+  # 前端产物当静态资源发出，前后端同源，无需任何反向代理。两个目录都由部署脚本注入环境变量，指向解包后的
+  # admin/h5 的 dist；WebMvcConfig 据此把 admin 挂到 /admin/**、h5 挂到 /**，并对前端路由回退 index.html。
+  # 留空即不启用（开发机两个前端各跑各的 Vite dev server 5173/5174，后端只出 /api 与 /files，行为不变）。
+  web:
+    admin-dir: ${FH_WEB_ADMIN_DIR:}
+    h5-dir: ${FH_WEB_H5_DIR:}
+
   # 密码本（v5 需求）。口令用 AES-256-GCM 可逆加密存储，密钥在这里。
   # 刻意留空 + 由各 profile 覆盖：Base64 的 32 字节，VaultCipherManager 启动时校验，
   # 配错/漏配直接启动失败（不能拖到第一次解密才发现，那时已经有条目用错密钥入库了）。

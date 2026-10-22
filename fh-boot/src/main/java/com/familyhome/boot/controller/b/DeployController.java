@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
  * 「部署最新」接口：变更记录页在线更新入口。
  *
  * <p>与变更记录同一道门槛——{@link CurrentUserHolder#requirePermission(String)} 判 {@code deploy.access}：
- * 拉代码 + 重启整套服务是最高危操作，只有勾了部署管理权限的角色（默认只有超管）能点。菜单只对有权限的人
+ * 下载替换产物 + 重启整套服务是最高危操作，只有勾了部署管理权限的角色（默认只有超管）能点。菜单只对有权限的人
  * 露出只是体验，绕开 UI 直接敲接口照样 403。
  *
  * <p>触发接口只负责点火并立刻返回 runId（后端随后会被重启杀掉），进度靠 {@code GET /deploy/progress} 轮询，
@@ -35,16 +35,20 @@ public class DeployController {
         this.objectMapper = objectMapper;
     }
 
-    /** 是否接入了「一键部署」。前端据此决定要不要显示「部署最新」入口，避免点了才报错。 */
+    /**
+     * 部署管理能力探测：是否接入「一键部署」+ 当前运行版本 + GitHub Release 最新版本 + 是否有更新可部署。
+     * 前端据此决定要不要显示「部署最新」入口、以及版本对比提示，避免点了才报错。
+     */
     @GetMapping("/capability")
     public Result<JsonNode> capability() {
         CurrentUserHolder.requirePermission(PermissionCatalog.DEPLOY_ACCESS);
-        ObjectNode node = objectMapper.createObjectNode();
-        node.put("enabled", deployService.isEnabled());
-        return Result.ok(node);
+        return Result.ok(deployService.capability());
     }
 
-    /** 触发一次「部署最新」：git pull 两仓 + 重启前后端。返回本次部署的 runId 供前端轮询进度。 */
+    /**
+     * 触发一次「部署最新」：分离拉起引擎进程，从 GitHub Release 下载最新产物包、校验哈希、原子替换本地 app 目录并重启后端。
+     * 只负责点火并立即返回本次部署的 runId（后端随后会被重启杀掉），进度靠 {@code GET /deploy/progress} 轮询。
+     */
     @PostMapping("/latest")
     public Result<JsonNode> deployLatest() {
         CurrentUserHolder.requirePermission(PermissionCatalog.DEPLOY_ACCESS);

@@ -6,10 +6,15 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.familyhome.common.exception.BizException;
 import com.familyhome.common.exception.ErrorCode;
+import java.net.URI;
+import java.net.http.HttpClient;
+import java.net.http.HttpRequest;
+import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.StandardCopyOption;
+import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
@@ -19,9 +24,14 @@ import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
 /**
- * 「部署最新」：变更记录页点一下，就让部署脚本 git pull 两仓 + 重启前后端。
+ * 「部署最新」：部署管理页点一下，就让引擎进程从 GitHub Release 拉最新产物包、原子换掉本地 app 目录并重启后端。
  *
- * <p><b>后端只做两件事，绝不自己动手改代码或杀进程</b>：
+ * <p><b>产物直跑而非 git pull</b>：运行态只有「后端 JAR + 两个前端 dist + MySQL」，更新走 GitHub Release
+ * 下载校验哈希后替换，不再联网 clone 源码或现场 mvn/pnpm 构建。运行版本戳读 {@code <FH_INSTALL_DIR>/app/version.json}，
+ * 最新版本戳打 {@code https://github.com/<FH_DEPLOY_RELEASE_REPO>/releases/latest/download/version.json}，
+ * 两者对比即 {@link #capability()} 里的 {@code updateAvailable}。
+ *
+ * <p><b>后端只做两件事，绝不自己动手下载/换产物/杀进程</b>：
  * <ol>
  *   <li>触发——分离式拉起 {@code FH_DEPLOY_LAUNCHER}（Windows 的 {@code deploy-now.cmd}），由它去跑
  *       {@code myhome-windows.ps1 -Action Update}。<b>必须分离</b>：Update 的第一步就是
@@ -47,28 +57,161 @@ public class DeployService {
     /** 一次部署最长认定「进行中」的时长；超过就当上一次烂尾了，允许重新触发（真并发另有 ps1 的 operation.lock 兜底）。 */
     private static final long STALE_RUNNING_MILLIS = TimeUnit.MINUTES.toMillis(30);
 
+    /** 探测 GitHub Release 最新版本（version.json）的 HTTP 超时；只读一个几百字节的小文件，短超时即可。 */
+    private static final Duration RELEASE_TIMEOUT = Duration.ofSeconds(8);
+
     private final ObjectMapper objectMapper;
     private final ChangeLogService changeLogService;
+    private final HttpClient httpClient;
     private final String launcher;
     private final String progressFile;
     private final String historyFile;
+    /**
+     * 安装根目录（引擎注入 {@code FH_INSTALL_DIR}，Spring 松弛绑定到属性 {@code fh.install-dir}——注意不是
+     * {@code fh.deploy.install-dir}，那需要 {@code FH_DEPLOY_INSTALL_DIR}，引擎并不注入该名字）。
+     * 运行版本戳读 {@code <install-dir>/app/version.json}——那是引擎冷启动/更新时解包并落盘的产物清单，
+     * 记录当前跑着的 payload 版本与两仓 commit。开发机没有该目录时留空。
+     */
+    private final String installDir;
+    /**
+     * GitHub Release 更新通道的仓库（引擎注入 {@code FH_DEPLOY_RELEASE_REPO}，形如 {@code owner/repo}）。
+     * 最新版本戳取 {@code https://github.com/<release-repo>/releases/latest/download/version.json}。留空即未接入更新通道。
+     */
+    private final String releaseRepo;
 
     public DeployService(
             ObjectMapper objectMapper,
             ChangeLogService changeLogService,
             @Value("${fh.deploy.launcher:}") String launcher,
             @Value("${fh.deploy.progress-file:}") String progressFile,
-            @Value("${fh.deploy.history-file:}") String historyFile) {
+            @Value("${fh.deploy.history-file:}") String historyFile,
+            @Value("${fh.install-dir:}") String installDir,
+            @Value("${fh.deploy.release-repo:}") String releaseRepo) {
         this.objectMapper = objectMapper;
         this.changeLogService = changeLogService;
         this.launcher = launcher == null ? "" : launcher.trim();
         this.progressFile = progressFile == null ? "" : progressFile.trim();
         this.historyFile = historyFile == null ? "" : historyFile.trim();
+        this.installDir = installDir == null ? "" : installDir.trim();
+        this.releaseRepo = releaseRepo == null ? "" : releaseRepo.trim();
+        this.httpClient = HttpClient.newBuilder()
+                .connectTimeout(RELEASE_TIMEOUT)
+                .followRedirects(HttpClient.Redirect.NORMAL)
+                .build();
     }
 
     /** launcher 与 progress-file 都注入了才算接入了「一键部署」；缺任一都视为当前环境不支持在线更新。 */
     public boolean isEnabled() {
         return !launcher.isEmpty() && !progressFile.isEmpty();
+    }
+
+    /**
+     * 部署管理能力探测：告诉前端「能不能部署、当前跑的是哪个版本、GitHub Release 上最新是哪个版本、要不要提示更新」。
+     *
+     * <p>运行版本读 {@code <FH_INSTALL_DIR>/app/version.json}（引擎解包产物时落盘的版本戳）；最新版本打
+     * {@code https://github.com/<FH_DEPLOY_RELEASE_REPO>/releases/latest/download/version.json}。两者都是只读探测，
+     * 后端<b>不下载、不换产物、不重启自己</b>——真正的拉取替换由「部署最新」分离拉起的引擎进程去做。
+     *
+     * <p>拿不到运行版本（开发机无安装目录）或连不上 Release（离线/限流）都只退化对应字段为空 + releaseError 文案，
+     * 绝不抛异常打挂部署管理页。
+     */
+    public ObjectNode capability() {
+        ObjectNode node = objectMapper.createObjectNode();
+        boolean enabled = isEnabled();
+        node.put("enabled", enabled);
+
+        JsonNode running = readRunningVersion();
+        String currentVersion = running == null ? "" : running.path("version").asText("");
+        node.put("currentVersion", currentVersion);
+        node.set("currentCommits", commitsOf(running));
+
+        String latestVersion = "";
+        ObjectNode latestCommits = objectMapper.createObjectNode();
+        String releaseError = null;
+        if (enabled && !releaseRepo.isEmpty()) {
+            JsonNode latest = fetchLatestRelease();
+            if (latest == null) {
+                releaseError = "无法连接 GitHub Release 获取最新版本，请稍后重试或检查网络";
+            } else {
+                latestVersion = latest.path("version").asText("");
+                latestCommits = commitsOf(latest);
+            }
+        }
+        node.put("latestVersion", latestVersion);
+        node.set("latestCommits", latestCommits);
+        node.put("updateAvailable",
+                !currentVersion.isEmpty() && !latestVersion.isEmpty() && !currentVersion.equals(latestVersion));
+        node.put("checkedAt", Instant.now().toString());
+        if (releaseError == null) {
+            node.putNull("releaseError");
+        } else {
+            node.put("releaseError", releaseError);
+        }
+        return node;
+    }
+
+    /** 读运行版本戳 {@code <install-dir>/app/version.json}；开发机无安装目录或文件缺失/损坏都返回 null。 */
+    private JsonNode readRunningVersion() {
+        if (installDir.isEmpty()) {
+            return null;
+        }
+        Path versionFile = Path.of(installDir, "app", "version.json");
+        try {
+            if (!Files.isRegularFile(versionFile)) {
+                return null;
+            }
+            return objectMapper.readTree(Files.readString(versionFile, StandardCharsets.UTF_8));
+        } catch (Exception e) {
+            log.warn("读取运行版本戳失败（忽略，按未知版本处理）: {}", e.toString());
+            return null;
+        }
+    }
+
+    /**
+     * 打 GitHub Release 最新版本戳：{@code https://github.com/<release-repo>/releases/latest/download/version.json}。
+     * {@code /releases/latest/download/<asset>} 会 302 到最新发布版的同名资产，故无需先查 release 列表。
+     * 任何失败（超时/断网/限流/非 200/解析错/根非对象）都只 warn 并返回 null，调用方据此退化。
+     */
+    private JsonNode fetchLatestRelease() {
+        if (releaseRepo.isEmpty()) {
+            return null;
+        }
+        String url = "https://github.com/" + releaseRepo + "/releases/latest/download/version.json";
+        try {
+            HttpRequest request = HttpRequest.newBuilder(URI.create(url))
+                    .timeout(RELEASE_TIMEOUT)
+                    .header("User-Agent", "family-home-server")
+                    .header("Accept", "application/json")
+                    .GET()
+                    .build();
+            HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
+            if (response.statusCode() != 200) {
+                log.warn("获取最新发布版本失败: HTTP {} url={}", response.statusCode(), url);
+                return null;
+            }
+            JsonNode node = objectMapper.readTree(response.body());
+            return node.isObject() ? node : null;
+        } catch (Exception e) {
+            log.warn("获取最新发布版本异常（忽略）: {}", e.toString());
+            return null;
+        }
+    }
+
+    /** 从 version.json 里抽出两仓 commit 组成 {@code {server, web}}；缺失的仓不写键。versionNode 为 null 时返回空对象。 */
+    private ObjectNode commitsOf(JsonNode versionNode) {
+        ObjectNode commits = objectMapper.createObjectNode();
+        if (versionNode == null) {
+            return commits;
+        }
+        String server = versionNode.path("server").path("commit").asText("");
+        String web = versionNode.path("web").path("commit").asText("");
+        if (!server.isEmpty()) {
+            commits.put("server", server);
+        }
+        if (!web.isEmpty()) {
+            commits.put("web", web);
+        }
+        return commits;
     }
 
     /**
@@ -94,10 +237,20 @@ public class DeployService {
         status.put("startedAt", now.toString());
         status.putNull("finishedAt");
         status.putNull("error");
-        status.set("targetCommits", latestCommits());
+        // 目标版本戳优先取 GitHub Release 最新 version.json（引擎随后也会用它下载替换）；连不上就退回变更记录里的两仓 HEAD。
+        JsonNode latest = fetchLatestRelease();
+        if (latest != null) {
+            String targetVersion = latest.path("version").asText("");
+            if (!targetVersion.isEmpty()) {
+                status.put("targetVersion", targetVersion);
+            }
+            status.set("targetCommits", commitsOf(latest));
+        } else {
+            status.set("targetCommits", latestCommits());
+        }
         status.set("resultCommits", objectMapper.createObjectNode());
         ArrayNode lines = status.putArray("lines");
-        addLine(lines, now, "已在变更记录页点击「部署最新」，正在拉起部署脚本…", "info");
+        addLine(lines, now, "已在部署管理页点击「部署最新」，正在拉起部署脚本…", "info");
         writeProgress(progress, status);
 
         spawnLauncher(runId, progress);
