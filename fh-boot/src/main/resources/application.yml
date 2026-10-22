@@ -124,15 +124,11 @@ fh:
     running-commit-server: ${FH_RUNNING_COMMIT_SERVER:}
     running-commit-web: ${FH_RUNNING_COMMIT_WEB:}
 
-  # 「部署最新」（部署管理页在线更新入口）。源码直跑下，点一下就让部署脚本 git pull 两仓 + 重启前后端。
-  # 后端只做两件事：分离式拉起 launcher（不把部署进程挂在自己的进程树上，否则重启时被 taskkill /T 连带杀掉）、
-  # 读 launcher 写出的进度文件回吐给前端。这些值都由部署脚本启动后端时注入环境变量；开发机留空即视为
-  # 「当前环境未接入一键部署」，前端不显示入口、后端触发接口直接报 DEPLOY_NOT_AVAILABLE。
+  # 部署管理（离线部署包）。后端只读地报告当前运行版本（读 <FH_INSTALL_DIR>/app/version.json）与部署历史，
+  # 不再有任何在线升级触发：更新由使用者手动放置新的离线部署包并跑部署脚本完成。
   deploy:
-    launcher: ${FH_DEPLOY_LAUNCHER:}
-    progress-file: ${FH_DEPLOY_PROGRESS_FILE:}
     # 部署历史：部署脚本每次跑到终态（done/failed）就把这一条追加进这个 JSON 数组文件（新在前、上限 50）。
-    # 后端只读不写——写的人是能活过后端之死的分离部署进程，后端自己触发的那次根本等不到结束。
+    # 后端只读不写——写的人是能活过后端之死的分离部署进程。
     # 留空即视为未接入，历史接口直接返回空数组（不是报错：没有历史和无历史文件是一回事）。
     history-file: ${FH_DEPLOY_HISTORY_FILE:}
 

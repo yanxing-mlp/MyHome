@@ -56,8 +56,7 @@ public class OperationLogService {
     private static final List<String> EXCLUDE_URI_PREFIXES = List.of(
             "/api/b/health",            // 部署机 keepalive 心跳，非用户操作
             "/api/b/operation-logs",    // 审计页自己的读写，记了就是自我反馈刷屏
-            "/api/b/logs/tail",         // 系统日志页 ~1.5s 轮询，机器刷新非用户点击
-            "/api/b/deploy/progress"    // 部署进度轮询，同上
+            "/api/b/logs/tail"          // 系统日志页 ~1.5s 轮询，机器刷新非用户点击
     );
 
     /** 入参/响应里这些字段一律脱敏成 ***（名字小写包含即命中）。 */
@@ -114,7 +113,6 @@ public class OperationLogService {
         EXPLICIT_ACTIONS.put("PUT /api/c/recipe/cart", "更新购物车");
         EXPLICIT_ACTIONS.put("DELETE /api/c/recipe/cart", "清空购物车");
         // —— 运维 ——
-        EXPLICIT_ACTIONS.put("POST /api/b/deploy/latest", "部署最新");
         EXPLICIT_ACTIONS.put("POST /api/b/validation/duplicate", "字段查重校验");
 
         RESOURCE_NOUNS.put("album", "相册");
