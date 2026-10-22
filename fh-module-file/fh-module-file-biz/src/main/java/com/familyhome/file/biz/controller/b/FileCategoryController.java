@@ -1,5 +1,7 @@
 package com.familyhome.file.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.context.DataPartition;
 import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.Result;
@@ -44,6 +46,7 @@ public class FileCategoryController {
     public Result<Long> create(
             @RequestBody @Valid CreateRequest request,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.FILE_MANAGE);
         return Result.ok(categoryService.create(request.getName(), DataPartition.forRequest(scope)));
     }
 

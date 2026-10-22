@@ -1,0 +1,104 @@
+-- V602: 批量补全历史遗留的列注释（system 域，版本号段 V6xx）
+-- 背景：早期建表迁移里通用列（id / create_time / update_time）、部分关联外键列，
+--       以及唯一约束用的 STORED 生成列（unique_* / path_hash / default_slot）未写 COMMENT，
+--       导致数据库管理页「表结构」Tab 这些列注释为空。
+-- 口径：逐列 MODIFY COLUMN，列定义（类型 / 字符集 / 排序规则 / NOT NULL / DEFAULT /
+--       AUTO_INCREMENT / ON UPDATE / GENERATED ALWAYS AS (...) STORED）从建表现值原样保留，
+--       仅追加 COMMENT，不改任何结构语义；不含 flyway_schema_history（Flyway 内部表）。
+-- 幂等：MODIFY COLUMN 追加注释可重复执行，结果一致。
+
+ALTER TABLE `album_group` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `album_group` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `album_group` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `album_group` MODIFY COLUMN `unique_owner` bigint unsigned GENERATED ALWAYS AS (if((`scope` = _utf8mb4'PERSONAL'),`creator_id`,0)) STORED COMMENT '个人域归属键：scope=PERSONAL 取 creator_id、否则 0，配合唯一索引隔离公/私域重名（生成列）';
+ALTER TABLE `album_group` MODIFY COLUMN `unique_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`status` = _utf8mb4'DELETED'),NULL,trim(`name`))) STORED COMMENT '未删除时的分组名（trim）：status=DELETED 置 NULL 放行重名，供唯一索引（生成列）';
+ALTER TABLE `album_image` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `album_image` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `album_image_group_rel` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `album_image_group_rel` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `album_image_group_rel` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `app_user` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `app_user` MODIFY COLUMN `deleted` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除：0 未删 / 1 已删';
+ALTER TABLE `app_user` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `app_user` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `app_user` MODIFY COLUMN `unique_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`deleted` = 0),trim(`name`),NULL)) STORED COMMENT '未删除时的昵称（trim）：deleted=1 置 NULL 放行重名，供唯一索引（生成列）';
+ALTER TABLE `app_user` MODIFY COLUMN `unique_phone` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`deleted` = 0),trim(`phone`),NULL)) STORED COMMENT '未删除时的手机号（trim）：deleted=1 置 NULL 放行重名，供唯一索引（生成列）';
+ALTER TABLE `file_category` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `file_category` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `file_category` MODIFY COLUMN `unique_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (trim(`name`)) STORED COMMENT '分类名（trim），供唯一索引（生成列）';
+ALTER TABLE `file_group` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `file_group` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `file_group` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `file_group_rel` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `file_group_rel` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `file_group_rel` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `file_object` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `file_object` MODIFY COLUMN `mime_type` varchar(128) NOT NULL COMMENT 'MIME 类型';
+ALTER TABLE `file_object` MODIFY COLUMN `ext` varchar(16) NOT NULL COMMENT '扩展名（小写，不含点）';
+ALTER TABLE `file_object` MODIFY COLUMN `width` int unsigned DEFAULT NULL COMMENT '图片宽度（像素），非图片为空';
+ALTER TABLE `file_object` MODIFY COLUMN `height` int unsigned DEFAULT NULL COMMENT '图片高度（像素），非图片为空';
+ALTER TABLE `file_object` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `file_object` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `path` varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_bin NOT NULL COMMENT '存储目录绝对路径';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `path_hash` binary(32) GENERATED ALWAYS AS (unhex(sha2(`path`,256))) STORED COMMENT 'path 的 SHA-256 摘要（binary），供唯一索引去重（生成列）';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `is_default` tinyint NOT NULL DEFAULT '0' COMMENT '是否默认目录：1 是 / 0 否';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `default_slot` tinyint GENERATED ALWAYS AS ((case when (`is_default` = 1) then 1 else NULL end)) STORED COMMENT '默认占位：is_default=1 时为 1、否则 NULL，配合唯一索引保证只有一个默认目录（生成列）';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `initialization_state` varchar(16) CHARACTER SET ascii COLLATE ascii_bin NOT NULL DEFAULT 'PENDING' COMMENT '目录初始化状态：PENDING 待初始化 / READY 就绪';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `private_identity` char(64) CHARACTER SET ascii COLLATE ascii_bin DEFAULT NULL COMMENT '私人分区恢复用的目录指纹';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `file_storage_directory` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `operation_log` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `operation_log` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `operation_log_setting` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `operation_log_setting` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe` MODIFY COLUMN `unique_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`status` = _utf8mb4'DELETED'),NULL,trim(`name`))) STORED COMMENT '未删除时的菜品名（trim）：status=DELETED 置 NULL 放行重名，供唯一索引（生成列）';
+ALTER TABLE `recipe_cart_checkout` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_cart_checkout` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_cart_item` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_cart_item` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_cart_item` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_cart_state` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_cart_state` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_category` MODIFY COLUMN `unique_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (trim(`name`)) STORED COMMENT '分类名（trim），供唯一索引（生成列）';
+ALTER TABLE `recipe_category_rel` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_category_rel` MODIFY COLUMN `recipe_id` bigint unsigned NOT NULL COMMENT '关联菜品 id';
+ALTER TABLE `recipe_category_rel` MODIFY COLUMN `category_id` bigint unsigned NOT NULL COMMENT '关联分类 id';
+ALTER TABLE `recipe_category_rel` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_category_rel` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_image` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_image` MODIFY COLUMN `recipe_id` bigint unsigned NOT NULL COMMENT '关联菜品 id';
+ALTER TABLE `recipe_image` MODIFY COLUMN `file_id` bigint unsigned NOT NULL COMMENT '关联文件 id（file_object）';
+ALTER TABLE `recipe_image` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_image` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_order` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_order` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_order` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `order_id` bigint unsigned NOT NULL COMMENT '关联订单 id';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `recipe_id` bigint unsigned NOT NULL COMMENT '关联菜品 id';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `qty` int NOT NULL COMMENT '份数';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_order_item` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_practice_group` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_practice_group` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_practice_group` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_practice_group` MODIFY COLUMN `unique_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (trim(`name`)) STORED COMMENT '做法分组名（trim），供唯一索引（生成列）';
+ALTER TABLE `recipe_practice_option` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_practice_option` MODIFY COLUMN `group_id` bigint unsigned NOT NULL COMMENT '关联做法分组 id';
+ALTER TABLE `recipe_practice_option` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_practice_option` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `recipe_practice_option` MODIFY COLUMN `unique_name` varchar(32) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (trim(`name`)) STORED COMMENT '做法选项名（trim），供唯一索引（生成列）';
+ALTER TABLE `recipe_practice_rel` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `recipe_practice_rel` MODIFY COLUMN `recipe_id` bigint unsigned NOT NULL COMMENT '关联菜品 id';
+ALTER TABLE `recipe_practice_rel` MODIFY COLUMN `group_id` bigint unsigned NOT NULL COMMENT '关联做法分组 id';
+ALTER TABLE `recipe_practice_rel` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `recipe_practice_rel` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `role_permission` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `role_permission` MODIFY COLUMN `create_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) COMMENT '创建时间';
+ALTER TABLE `role_permission` MODIFY COLUMN `update_time` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3) COMMENT '修改时间';
+ALTER TABLE `vault_account` MODIFY COLUMN `id` bigint unsigned NOT NULL AUTO_INCREMENT COMMENT '主键';
+ALTER TABLE `vault_account` MODIFY COLUMN `deleted` tinyint NOT NULL DEFAULT '0' COMMENT '逻辑删除：0 未删 / 1 已删';
+ALTER TABLE `vault_account` MODIFY COLUMN `unique_name` varchar(64) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`deleted` = 0),trim(`name`),NULL)) STORED COMMENT '未删除时的名称（trim）：deleted=1 置 NULL 放行重名，供唯一索引（生成列）';
+ALTER TABLE `vault_account` MODIFY COLUMN `unique_account` varchar(128) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci GENERATED ALWAYS AS (if((`deleted` = 0),trim(`account`),NULL)) STORED COMMENT '未删除时的账号（trim）：deleted=1 置 NULL 放行重名，供唯一索引（生成列）';

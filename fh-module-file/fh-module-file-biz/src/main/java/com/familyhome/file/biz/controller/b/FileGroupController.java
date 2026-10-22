@@ -1,5 +1,7 @@
 package com.familyhome.file.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.Result;
 import com.familyhome.file.biz.model.vo.admin.FileGroupVO;
@@ -38,6 +40,16 @@ public class FileGroupController {
 
     private final FileGroupService groupService;
 
+    /**
+     * 写操作的门禁按 {@code bizType} 分档：视频分组归"视频管理"（{@code video.manage}），
+     * 其余（document）归"文件管理"（{@code file.manage}）。列表是读，只走登录态。
+     */
+    private static void requireManage(String bizType) {
+        CurrentUserHolder.requirePermission("video".equals(bizType)
+                ? PermissionCatalog.VIDEO_MANAGE
+                : PermissionCatalog.FILE_MANAGE);
+    }
+
     /** 某类分组的全量列表，不分页，带组内文件数。 */
     @GetMapping
     public Result<List<FileGroupVO>> list(
@@ -53,6 +65,7 @@ public class FileGroupController {
             @RequestBody @Valid CreateRequest request,
             @RequestParam("bizType") String bizType,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        requireManage(bizType);
         return Result.ok(groupService.create(bizType, request.getName(), scope));
     }
 
@@ -63,6 +76,7 @@ public class FileGroupController {
             @RequestBody @Valid RenameRequest request,
             @RequestParam("bizType") String bizType,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        requireManage(bizType);
         groupService.update(id, request.getName(), bizType, scope);
         return Result.ok();
     }
@@ -73,6 +87,7 @@ public class FileGroupController {
             @RequestBody @Valid BatchSortRequest request,
             @RequestParam("bizType") String bizType,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        requireManage(bizType);
         groupService.batchUpdateSort(request.getItems(), bizType, scope);
         return Result.ok();
     }
@@ -83,6 +98,7 @@ public class FileGroupController {
             @PathVariable Long id,
             @RequestParam("bizType") String bizType,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        requireManage(bizType);
         groupService.delete(id, bizType, scope);
         return Result.ok();
     }
@@ -94,6 +110,7 @@ public class FileGroupController {
             @RequestBody @Valid SetGroupsRequest request,
             @RequestParam("bizType") String bizType,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        requireManage(bizType);
         groupService.setFileGroups(fileId, request.getGroupIds(), bizType, scope);
         return Result.ok();
     }

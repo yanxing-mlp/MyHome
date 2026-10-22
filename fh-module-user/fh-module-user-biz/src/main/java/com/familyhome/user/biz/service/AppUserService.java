@@ -1,6 +1,7 @@
 package com.familyhome.user.biz.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.familyhome.common.auth.PermissionCatalog;
 import com.familyhome.common.auth.SessionToken;
 import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.crypto.TransportCipher;
@@ -25,6 +26,7 @@ import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -84,6 +86,8 @@ public class AppUserService {
     private final TransportCipher transportCipher;
     /** 登录成功后签发会话令牌，取代可被前端伪造的 {@code X-User-Id}。见 {@link SessionToken}。 */
     private final SessionToken sessionToken;
+    /** 逐请求把角色换成"这个角色现在勾了哪些权限码"，填进 {@link CurrentUserHolder.CurrentUser}。见 {@link RolePermissionService}。 */
+    private final RolePermissionService rolePermissionService;
 
     /**
      * 登录页下拉框 + 各页"添加人"的 id → 昵称字典。白名单接口，不需要登录令牌。
@@ -256,9 +260,9 @@ public class AppUserService {
         }
     }
 
-    /** 账号管理列表。整个方法只服务 ADMIN，读接口也一样挡，因为里面有手机号。 */
+    /** 账号管理列表。整个方法只服务有 {@code user.access} 权限的人，读接口也一样挡，因为里面有手机号。 */
     public List<UserAdminVO> list() {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.USER_ACCESS);
         List<AppUserDO> users = appUserMapper.selectList(
                 new LambdaQueryWrapper<AppUserDO>().orderByAsc(AppUserDO::getId));
         Map<Long, String> avatars = avatarUrls(users);
@@ -271,7 +275,7 @@ public class AppUserService {
      */
     @Transactional
     public Long create(UserCreateRequest request) {
-        CurrentUserHolder.CurrentUser admin = CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.CurrentUser admin = CurrentUserHolder.requirePermission(PermissionCatalog.USER_ACCESS);
         String name = request.getName().trim();
         String phone = request.getPhone().trim();
         requireNameUnused(name, null);
@@ -292,37 +296,54 @@ public class AppUserService {
     }
 
     /**
-     * 管理员设置某个人的角色。<b>这是管理员唯一能替别人写的一格</b>：整条只更新 {@code role} 一列，
+     * 设置某个人的角色（三档：SUPER_ADMIN / ADMIN / MEMBER）。<b>整条只更新 {@code role} 一列</b>，
      * 昵称/手机号/口令/头像都不在这条的入参里（那四项只有本人在个人中心动）。
      *
-     * <p><b>它换不到任何凭据</b>：改完这个角色，操作人既看不到、也设不了对方的口令——
-     * 那条"管理员替别人重置口令"的接口在这一版仍然不存在，忘了口令的兜底还是删号重建。
-     * 这一条买到的只是"谁能进账号管理这一页"。
+     * <p><b>只有超级管理员能改角色</b>（{@code requireSuperAdmin} 硬门禁，v48 需求点名的口径）。
+     * 这一条<b>不进权限矩阵</b>：如果普通管理员也能改角色，他就能把自己或同伙提成超管，
+     * 三档角色的边界就塌了。所以"改角色"与"改权限矩阵"（{@code RolePermissionService#save}）一样，
+     * 都锁死在超管这一档，勾选任何权限都改不了它。
      *
-     * <p>两道护栏与 {@link #delete} 同构、同顺序，为的是单人管理员时提示语说得通：
-     * 唯一的管理员来降自己，先报"至少保留一个管理员"，因为那句"请让另一位管理员操作"在这种情况下没人可请。
-     * 之所以连"降自己"都要挡：本机那一格存着 {@code role}，降完界面还挂着"我是管理员"，
-     * 菜单在、请求全 403，得等下一次 {@code /me} 校准才对得上——与删自己是同一类坑。
+     * <p>它<b>换不到任何凭据</b>：改完这个角色，操作人既看不到、也设不了对方的口令——
+     * 那条"替别人重置口令"的接口在这一版仍然不存在，忘了口令的兜底还是删号重建。
      *
-     * <p>角色值只认 {@code ADMIN} / {@code MEMBER} 两个串（与 {@code CurrentUserHolder} 的常量对齐），
-     * 其余一律 400。这一列没有 CHECK 约束，脏值会让那个人既进不了账号管理也不是普通成员。
+     * <p>三道护栏，都源于「全系统只能有一个超级管理员」这条不变式（v50 用户明确要的口径）：
+     * <ol>
+     *   <li><b>不能把别人提成超级管理员</b>：超管由种子固定为一个人（大宝），运行期不开放第二个。
+     *       于是「交接超管」在本系统里根本不存在——谁都提不上来，也就不存在两个超管并存的局面。</li>
+     *   <li><b>不能改自己的角色</b>：操作人就是唯一的超管，把自己降档会导致再没人能管账号与权限，
+     *       且本机那一格 {@code role}/{@code permissions} 还挂着旧身份，菜单在、请求全 403。</li>
+     *   <li><b>超级管理员那一行不能被降档</b>：防御性兜底——正常只有本人能命中超管行，已被上一条挡住，
+     *       这一条堵的是绕过前端的裸调用。</li>
+     * </ol>
+     *
+     * <p>所以这一条实际能写的只有「把某个普通成员/普通管理员在 ADMIN ↔ MEMBER 之间调」，
+     * 超管那一档既进不来也出不去。角色值只认 {@code SUPER_ADMIN} / {@code ADMIN} / {@code MEMBER}
+     * 三个串（与 {@code CurrentUserHolder} 常量对齐），其余一律 400。这一列没有 CHECK 约束，
+     * 脏值会让那个人既进不了任何管理页也不是普通成员。
      */
     @Transactional
     public void updateRole(Long id, UserRoleUpdateRequest request) {
-        CurrentUserHolder.CurrentUser admin = CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.CurrentUser operator = CurrentUserHolder.requireSuperAdmin();
         String role = request.getRole();
-        if (!CurrentUserHolder.ROLE_ADMIN.equals(role) && !CurrentUserHolder.ROLE_MEMBER.equals(role)) {
-            throw BizException.of(ErrorCode.BAD_REQUEST, "角色只能是 ADMIN 或 MEMBER");
+        if (!CurrentUserHolder.ROLE_SUPER_ADMIN.equals(role)
+                && !CurrentUserHolder.ROLE_ADMIN.equals(role)
+                && !CurrentUserHolder.ROLE_MEMBER.equals(role)) {
+            throw BizException.of(ErrorCode.BAD_REQUEST, "角色只能是 SUPER_ADMIN、ADMIN 或 MEMBER");
         }
         AppUserDO target = requireExists(id);
 
-        if (CurrentUserHolder.ROLE_ADMIN.equals(target.getRole())
-                && CurrentUserHolder.ROLE_MEMBER.equals(role)
-                && countByRole(CurrentUserHolder.ROLE_ADMIN) <= 1) {
-            throw BizException.of(ErrorCode.USER_FORBIDDEN, "至少保留一个管理员，否则没人能再管理账号");
+        // 只能有一个超管：超管由种子固定，不开放把别人提成超管，否则就会出现两个超管并存的局面。
+        if (CurrentUserHolder.ROLE_SUPER_ADMIN.equals(role)) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "超级管理员只能有一个，不能把其他账号设为超级管理员");
         }
-        if (Objects.equals(admin.id(), id)) {
-            throw BizException.of(ErrorCode.USER_FORBIDDEN, "不能修改自己的角色，请让另一位管理员操作");
+        // 操作人就是唯一的超管，改自己的角色会导致没人能再管账号与权限（且本机界面还挂着旧身份）。
+        if (Objects.equals(operator.id(), id)) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "不能修改自己的角色");
+        }
+        // 防御：超管那一行只能由本人命中（已被上一条挡住），这里堵的是绕过前端的裸调用。
+        if (CurrentUserHolder.ROLE_SUPER_ADMIN.equals(target.getRole())) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "超级管理员账号不能被改角色");
         }
 
         AppUserDO patch = new AppUserDO();
@@ -332,25 +353,25 @@ public class AppUserService {
         if (rows == 0) {
             throw BizException.of(ErrorCode.USER_NOT_FOUND, "该账号已被删除");
         }
-        log.info("设置角色: id={}, name={}, role={}, 操作人={}", id, target.getName(), role, admin.name());
+        log.info("设置角色: id={}, name={}, role={}, 操作人={}", id, target.getName(), role, operator.name());
     }
 
     /**
-     * 删除账号（软删）。管理员对"别人能不能登进来"的另一格控制权（与 {@link #updateRole} 一起构成全部）：
-     * 能加人、能删人、能定谁是超管，但改不了任何人的资料与口令。
+     * 删除账号（软删）。有 {@code user.access} 权限的人对"别人能不能登进来"的一格控制权：
+     * 能加人、能删人，但改不了任何人的资料与口令，改角色还得是超管（{@link #updateRole}）。
      *
-     * <p><b>管理员账号一律不可删</b>：要删掉某个管理员，得先由另一位管理员把他的角色降成普通成员
-     * （{@link #updateRole}），降下来之后那一行才会出现删除按钮。这一条同时天然挡住了"删自己"——
-     * 能走到这里的操作人必然是管理员，他那一行正是 ADMIN，所以永远删不到自己，也就不再需要单独的
-     * 自我删除分支；"至少保留一个管理员"的计数同样多余：管理员根本删不掉，最后一个管理员自然还在。
+     * <p><b>只有超级管理员不可删</b>（v50 口径，比旧版「管理岗一律不可删」放宽）：普通管理员与普通成员
+     * 都能直接删。超管是全系统的根、且只能有一个，删了就再没人能管账号与权限，所以那一行永远不给删。
+     * 这一条同时天然挡住了「删自己」——默认只有超管有 {@code user.access}，能走到这里的操作人就是唯一的超管，
+     * 而超管不可删，故操作人删不到自己；即便将来给某个普通成员授了 {@code user.access}，他也删不掉超管。
      */
     @Transactional
     public void delete(Long id) {
-        CurrentUserHolder.CurrentUser admin = CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.CurrentUser admin = CurrentUserHolder.requirePermission(PermissionCatalog.USER_ACCESS);
         AppUserDO target = requireExists(id);
 
-        if (CurrentUserHolder.ROLE_ADMIN.equals(target.getRole())) {
-            throw BizException.of(ErrorCode.USER_FORBIDDEN, "管理员账号不能删除，请先取消其管理员角色");
+        if (CurrentUserHolder.ROLE_SUPER_ADMIN.equals(target.getRole())) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "超级管理员账号不能删除");
         }
 
         appUserMapper.deleteById(id);
@@ -368,7 +389,9 @@ public class AppUserService {
         if (user == null) {
             throw BizException.of(ErrorCode.USER_NOT_FOUND, "账号不存在或已被删除，请重新登录");
         }
-        return new CurrentUserHolder.CurrentUser(user.getId(), user.getName(), user.getRole());
+        // 每次请求都现查权限：改了矩阵/改了角色，下一次请求立即生效（与令牌不含 role 同理）。
+        Set<String> permissions = rolePermissionService.permissionsOf(user.getRole());
+        return new CurrentUserHolder.CurrentUser(user.getId(), user.getName(), user.getRole(), permissions);
     }
 
     private AppUserDO requireExists(Long id) {
@@ -407,11 +430,6 @@ public class AppUserService {
         }
     }
 
-    private long countByRole(String role) {
-        return appUserMapper.selectCount(
-                new LambdaQueryWrapper<AppUserDO>().eq(AppUserDO::getRole, role));
-    }
-
     /**
      * 一次批量拿头像 URL，禁止在循环里调 {@code fileFacade}（列表页 N 个人就是 N 次跨域调用）。
      *
@@ -441,6 +459,8 @@ public class AppUserService {
         vo.setName(user.getName());
         vo.setRole(user.getRole());
         vo.setAvatarUrl(user.getAvatarFileId() == null ? null : avatars.get(user.getAvatarFileId()));
+        // 权限清单随身份一起下发：前端据此露菜单/定只读态。超管由 permissionsOf 短路为全量。
+        vo.setPermissions(List.copyOf(rolePermissionService.permissionsOf(user.getRole())));
         return vo;
     }
 

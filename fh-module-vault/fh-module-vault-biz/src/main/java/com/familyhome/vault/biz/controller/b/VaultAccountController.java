@@ -1,5 +1,7 @@
 package com.familyhome.vault.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.PageResult;
 import com.familyhome.common.result.Result;
@@ -53,6 +55,7 @@ public class VaultAccountController {
     @PostMapping
     public Result<Long> create(@RequestParam(defaultValue = "PUBLIC") DataScope scope,
                                @Valid @RequestBody VaultAccountCreateRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.VAULT_MANAGE);
         return Result.ok(vaultAccountService.create(scope, request));
     }
 
@@ -60,6 +63,7 @@ public class VaultAccountController {
     public Result<Void> update(@PathVariable Long id,
                                @RequestParam(defaultValue = "PUBLIC") DataScope scope,
                                @Valid @RequestBody VaultAccountUpdateRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.VAULT_MANAGE);
         vaultAccountService.update(scope, id, request);
         return Result.ok();
     }
@@ -67,6 +71,7 @@ public class VaultAccountController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id,
                                @RequestParam(defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.VAULT_MANAGE);
         vaultAccountService.delete(scope, id);
         return Result.ok();
     }

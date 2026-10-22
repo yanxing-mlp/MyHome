@@ -480,7 +480,7 @@ class StorageRoutingTest {
     }
 
     private static void signIn() {
-        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "storage-test", CurrentUserHolder.ROLE_MEMBER));
+        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "storage-test", CurrentUserHolder.ROLE_MEMBER, java.util.Set.of()));
     }
 
     private void switchDefault() {

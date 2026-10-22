@@ -2,6 +2,8 @@ package com.familyhome.album.biz.controller.b;
 
 import com.familyhome.album.api.dto.AlbumCityDTO;
 import com.familyhome.album.biz.service.AlbumCityService;
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.AlbumScope;
 import com.familyhome.common.result.Result;
 import java.util.List;
@@ -30,6 +32,7 @@ public class AlbumCityController {
     /** 只重算请求分区，不影响其他相册或其他账号。 */
     @PostMapping("/cities/recalculate")
     public Result<Void> recalculateCities(@RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         cityService.recalculateCities(scope);
         return Result.ok();
     }

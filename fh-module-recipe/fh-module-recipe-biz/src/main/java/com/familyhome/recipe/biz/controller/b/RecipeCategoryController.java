@@ -1,5 +1,7 @@
 package com.familyhome.recipe.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.result.Result;
 import com.familyhome.recipe.api.dto.CreateCategoryRequest;
 import com.familyhome.recipe.api.dto.RecipeCategoryDTO;
@@ -38,6 +40,7 @@ public class RecipeCategoryController {
      */
     @PostMapping
     public Result<Long> createCategory(@RequestBody @Valid CreateCategoryRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.RECIPE_MANAGE);
         return Result.ok(categoryService.createCategory(request));
     }
 
@@ -46,6 +49,7 @@ public class RecipeCategoryController {
      */
     @PutMapping("/{id}")
     public Result<Void> updateCategory(@PathVariable Long id, @RequestBody @Valid CreateCategoryRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.RECIPE_MANAGE);
         categoryService.updateCategory(id, request);
         return Result.ok();
     }
@@ -55,6 +59,7 @@ public class RecipeCategoryController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> deleteCategory(@PathVariable Long id) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.RECIPE_MANAGE);
         categoryService.deleteCategory(id);
         return Result.ok();
     }

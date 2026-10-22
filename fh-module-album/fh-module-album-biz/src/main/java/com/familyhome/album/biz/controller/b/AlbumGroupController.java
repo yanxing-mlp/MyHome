@@ -3,6 +3,8 @@ package com.familyhome.album.biz.controller.b;
 import com.familyhome.album.api.dto.AlbumImageBindRequest;
 import com.familyhome.album.biz.model.vo.admin.AlbumGroupVO;
 import com.familyhome.album.biz.service.AlbumGroupService;
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.AlbumScope;
 import com.familyhome.common.enums.ContentStatus;
 import com.familyhome.common.result.Result;
@@ -58,6 +60,7 @@ public class AlbumGroupController {
      */
     @PostMapping
     public Result<Long> create(@RequestBody @Valid CreateRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         return Result.ok(groupService.create(request.getName(), request.getScope()));
     }
 
@@ -65,6 +68,7 @@ public class AlbumGroupController {
     @PutMapping("/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid UpdateGroupRequest request,
                                @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         groupService.update(id, request.getName(), request.getStatus(), scope);
         return Result.ok();
     }
@@ -73,6 +77,7 @@ public class AlbumGroupController {
     @PutMapping("/sort")
     public Result<Void> batchUpdateSort(@RequestBody @Valid BatchSortRequest request,
                                         @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         groupService.batchUpdateSort(request.getItems(), scope);
         return Result.ok();
     }
@@ -81,6 +86,7 @@ public class AlbumGroupController {
     @DeleteMapping("/{id}")
     public Result<Void> delete(@PathVariable Long id,
                                @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         groupService.delete(id, scope);
         return Result.ok();
     }
@@ -97,6 +103,7 @@ public class AlbumGroupController {
             @PathVariable Long groupId,
             @RequestBody @Valid BindImagesRequest request,
             @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         return Result.ok(groupService.bindImages(groupId, request.getItems(), scope, false));
     }
 

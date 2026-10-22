@@ -3,6 +3,7 @@ package com.familyhome.boot;
 import org.mybatis.spring.annotation.MapperScan;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 家庭 Home 服务端唯一启动入口。
@@ -15,12 +16,14 @@ import org.springframework.boot.autoconfigure.SpringBootApplication;
  * 只做启动聚合 + 全局配置（方案 §3.1）。
  */
 @SpringBootApplication(scanBasePackages = "com.familyhome")
+@EnableScheduling // 操作审计按保留天数每日清理过期行（OperationLogService#cleanupExpired）
 @MapperScan({
         "com.familyhome.file.biz.dao",
         "com.familyhome.album.biz.dao",
         "com.familyhome.recipe.biz.mapper",
         "com.familyhome.vault.biz.dao",
-        "com.familyhome.user.biz.dao"
+        "com.familyhome.user.biz.dao",
+        "com.familyhome.boot.dao"
 })
 public class FamilyHomeApplication {
 

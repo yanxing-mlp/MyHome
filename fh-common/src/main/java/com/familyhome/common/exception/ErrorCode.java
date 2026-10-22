@@ -81,4 +81,10 @@ public final class ErrorCode {
     /** 昵称或手机号与存活账号重复（应用层预检 + V503 唯一索引），对应 HTTP 409 */
     public static final String USER_NAME_DUPLICATED = "USER_NAME_DUPLICATED";
     public static final String USER_PHONE_DUPLICATED = "USER_PHONE_DUPLICATED";
+
+    // ===== deploy 域（变更记录页「部署最新」）=====
+    /** 当前运行环境没接入一键部署（缺 FH_DEPLOY_LAUNCHER / FH_DEPLOY_PROGRESS_FILE），对应 HTTP 400。开发机就是这个码。 */
+    public static final String DEPLOY_NOT_AVAILABLE = "DEPLOY_NOT_AVAILABLE";
+    /** 已有一次部署在进行中，别重复点，对应 HTTP 400。 */
+    public static final String DEPLOY_IN_PROGRESS = "DEPLOY_IN_PROGRESS";
 }

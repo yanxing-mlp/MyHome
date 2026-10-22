@@ -1,5 +1,7 @@
 package com.familyhome.recipe.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.result.PageResult;
 import com.familyhome.common.result.Result;
 import com.familyhome.recipe.api.dto.RecipeOrderDTO;
@@ -62,6 +64,7 @@ public class RecipeOrderController {
      */
     @PostMapping("/{id}/complete")
     public Result<Void> completeOrder(@PathVariable Long id) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         orderService.completeOrder(id);
         return Result.ok();
     }
@@ -73,6 +76,7 @@ public class RecipeOrderController {
      */
     @PostMapping("/{id}/cancel")
     public Result<Void> cancelOrder(@PathVariable Long id) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         orderService.cancelOrder(id);
         return Result.ok();
     }
@@ -85,6 +89,7 @@ public class RecipeOrderController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> deleteOrder(@PathVariable Long id) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         orderService.deleteOrder(id);
         return Result.ok();
     }

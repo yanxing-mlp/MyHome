@@ -4,6 +4,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.familyhome.album.biz.model.vo.admin.AlbumImagePageVO;
 import com.familyhome.album.biz.model.vo.admin.AlbumImageVO;
 import com.familyhome.album.biz.service.AlbumImageService;
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.AlbumScope;
 import com.familyhome.common.enums.ContentStatus;
 import com.familyhome.common.result.Result;
@@ -65,6 +67,7 @@ public class AlbumImageController {
     @PutMapping("/images/{id}")
     public Result<Void> update(@PathVariable Long id, @RequestBody @Valid UpdateImageRequest request,
                                @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         imageService.update(id, request.getCity(), request.getStatus(), scope);
         return Result.ok();
     }
@@ -73,6 +76,7 @@ public class AlbumImageController {
     @PutMapping("/images/{id}/pin")
     public Result<Void> togglePin(@PathVariable Long id, @RequestBody @Valid TogglePinRequest request,
                                   @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         imageService.togglePin(id, request.isPinned(), scope);
         return Result.ok();
     }
@@ -81,6 +85,7 @@ public class AlbumImageController {
     @DeleteMapping("/images/{id}")
     public Result<Void> delete(@PathVariable Long id,
                                @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         imageService.delete(id, scope);
         return Result.ok();
     }
@@ -89,6 +94,7 @@ public class AlbumImageController {
     @DeleteMapping("/images")
     public Result<Void> batchDelete(@RequestBody @Valid BatchDeleteRequest request,
                                     @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         imageService.batchDelete(request.getIds(), scope);
         return Result.ok();
     }
@@ -104,6 +110,7 @@ public class AlbumImageController {
     @PutMapping("/images/{id}/groups")
     public Result<Void> setImageGroups(@PathVariable Long id, @RequestBody @Valid GroupIdsRequest request,
                                        @RequestParam(defaultValue = "FAMILY") AlbumScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ALBUM_MANAGE);
         imageService.setImageGroups(id, request.getGroupIds(), scope);
         return Result.ok();
     }

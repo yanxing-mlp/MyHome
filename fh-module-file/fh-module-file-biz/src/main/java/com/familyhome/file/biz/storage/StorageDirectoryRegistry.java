@@ -1,5 +1,6 @@
 package com.familyhome.file.biz.storage;
 
+import com.familyhome.common.auth.PermissionCatalog;
 import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.exception.BizException;
 import com.familyhome.common.exception.ErrorCode;
@@ -157,7 +158,7 @@ public class StorageDirectoryRegistry {
     }
 
     public Snapshot listForAdmin() {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.STORAGE_ACCESS);
         // 同一条 SELECT 拿默认及列表，不会跨越默认切换事务得到混合快照。
         List<Directory> rows = directories();
         long defaultId = rows.stream().filter(Directory::isDefault).mapToLong(Directory::id).findFirst().orElse(0L);
@@ -170,7 +171,7 @@ public class StorageDirectoryRegistry {
 
     /** 服务器目录选择器：仅浏览本层目录和只读预校验，不创建目录、探针或触发用量扫描。 */
     public FolderListing browseForAdmin(String path) {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.STORAGE_ACCESS);
         try {
             Path requested = path == null ? null : parsePath(path, true, true);
             List<Directory> rows = directories();
@@ -290,7 +291,7 @@ public class StorageDirectoryRegistry {
     }
 
     public long addForAdmin(String path) {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.STORAGE_ACCESS);
         try {
             Path requested = parsePath(path, true);
             Registration registration = transaction.execute(status -> {
@@ -338,7 +339,7 @@ public class StorageDirectoryRegistry {
     }
 
     public void setDefaultForAdmin(long id) {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.STORAGE_ACCESS);
         try {
             transaction.executeWithoutResult(status -> {
                 lockRegistry();

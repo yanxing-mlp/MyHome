@@ -1,5 +1,7 @@
 package com.familyhome.file.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.Result;
 import com.familyhome.file.biz.model.vo.admin.VideoVO;
@@ -54,6 +56,7 @@ public class VideoController {
             @RequestPart("file") MultipartFile file,
             @RequestParam(name = "groupIds", required = false) List<Long> groupIds,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.VIDEO_MANAGE);
         return Result.ok(videoService.upload(file, groupIds, scope));
     }
 
@@ -62,6 +65,7 @@ public class VideoController {
     public Result<Void> delete(
             @PathVariable Long id,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.VIDEO_MANAGE);
         videoService.delete(id, scope);
         return Result.ok();
     }

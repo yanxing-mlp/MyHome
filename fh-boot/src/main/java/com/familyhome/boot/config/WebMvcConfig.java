@@ -30,6 +30,9 @@ public class WebMvcConfig implements WebMvcConfigurer {
     /** 认"现在是谁"的那一层，见 {@link CurrentUserInterceptor}；它自己带上了所需的服务。 */
     private final CurrentUserInterceptor currentUserInterceptor;
 
+    /** 操作审计层，见 {@link OperationLogInterceptor}；<b>必须注册在 currentUserInterceptor 之后</b>。 */
+    private final OperationLogInterceptor operationLogInterceptor;
+
     private final FileStorageConfig storageConfig;
 
     /**
@@ -81,6 +84,10 @@ public class WebMvcConfig implements WebMvcConfigurer {
     @Override
     public void addInterceptors(InterceptorRegistry registry) {
         registry.addInterceptor(currentUserInterceptor)
+                .addPathPatterns("/api/**");
+        // 顺序不可颠倒：afterCompletion 逆序回调，审计层注册在后 → 它的 afterCompletion 先跑，
+        // 那时 CurrentUserHolder 还没被 currentUserInterceptor 清掉，审计才拿得到操作人（见 OperationLogInterceptor 注释）。
+        registry.addInterceptor(operationLogInterceptor)
                 .addPathPatterns("/api/**");
     }
 }

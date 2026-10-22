@@ -1,5 +1,7 @@
 package com.familyhome.file.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.enums.DataScope;
 import com.familyhome.common.result.Result;
 import com.familyhome.file.biz.model.vo.admin.DocumentFileVO;
@@ -63,6 +65,7 @@ public class DocumentFileController {
             @RequestParam("categoryId") Long categoryId,
             @RequestParam(name = "groupIds", required = false) List<Long> groupIds,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.FILE_MANAGE);
         return Result.ok(documentFileService.upload(file, categoryId, groupIds, scope));
     }
 
@@ -71,6 +74,7 @@ public class DocumentFileController {
     public Result<Void> delete(
             @PathVariable Long id,
             @RequestParam(name = "scope", defaultValue = "PUBLIC") DataScope scope) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.FILE_MANAGE);
         documentFileService.delete(id, scope);
         return Result.ok();
     }

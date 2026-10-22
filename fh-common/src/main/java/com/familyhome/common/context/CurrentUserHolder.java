@@ -1,7 +1,9 @@
 package com.familyhome.common.context;
 
+import com.familyhome.common.auth.PermissionCatalog;
 import com.familyhome.common.exception.BizException;
 import com.familyhome.common.exception.ErrorCode;
+import java.util.Set;
 
 /**
  * 当前登录用户（请求级 ThreadLocal）。
@@ -39,18 +41,36 @@ public final class CurrentUserHolder {
     /**
      * 当前登录用户。
      *
-     * @param id   app_user.id，写 creator_id 用
-     * @param name 昵称，只用于日志
-     * @param role ADMIN / MEMBER，账号管理的权限判据
+     * @param id          app_user.id，写 creator_id 用
+     * @param name        昵称，只用于日志
+     * @param role        SUPER_ADMIN / ADMIN / MEMBER，见下面的角色常量
+     * @param permissions 该角色当前勾选的权限码集合（{@link PermissionCatalog}）。超管恒为全量、
+     *                    由 {@link #hasPermission} 短路，不依赖这一格；其余角色由 user 域按
+     *                    {@code role_permission} 表现值填入，改了矩阵下一次请求即生效。
      */
-    public record CurrentUser(Long id, String name, String role) {
+    public record CurrentUser(Long id, String name, String role, Set<String> permissions) {
 
-        public boolean isAdmin() {
-            return ROLE_ADMIN.equals(role);
+        /** 是不是超级管理员。超管拥有全部权限、且是唯一能改角色与改权限矩阵的人。 */
+        public boolean isSuperAdmin() {
+            return ROLE_SUPER_ADMIN.equals(role);
+        }
+
+        /** 至少是普通管理员（含超管）。用于"是不是管理岗"这类粗判，不替代 {@link #hasPermission}。 */
+        public boolean isManager() {
+            return ROLE_SUPER_ADMIN.equals(role) || ROLE_ADMIN.equals(role);
+        }
+
+        /** 这个角色有没有某个权限码。超管短路为"全都有"，与库里勾没勾无关（防自锁）。 */
+        public boolean hasPermission(String code) {
+            return isSuperAdmin() || (permissions != null && permissions.contains(code));
         }
     }
 
+    /** 超级管理员：全部权限、且唯一能设置他人角色与编辑权限矩阵（硬门禁，见 {@link #requireSuperAdmin()}）。 */
+    public static final String ROLE_SUPER_ADMIN = "SUPER_ADMIN";
+    /** 普通管理员：默认能管业务（菜谱/相册/文件/视频/点单/密码本），看不到系统后台。 */
     public static final String ROLE_ADMIN = "ADMIN";
+    /** 普通成员：默认业务只读（能看不能改），看不到系统后台。 */
     public static final String ROLE_MEMBER = "MEMBER";
 
     private static final ThreadLocal<CurrentUser> HOLDER = new ThreadLocal<>();
@@ -81,14 +101,40 @@ public final class CurrentUserHolder {
         return user.id();
     }
 
-    /** 账号管理类接口才允许走；不在拦截器里判，是为了让"哪个接口要管理员"读代码时看得见 */
-    public static CurrentUser requireAdmin() {
+    /**
+     * 要求当前登录人拥有某个权限码，否则 403。
+     *
+     * <p>取代了旧的 {@code requireAdmin()}：那时权限只有"是不是管理员"一档，现在是一张可编辑的
+     * 权限矩阵，判据下沉到"这个角色勾没勾这个权限"。系统后台各页判 {@code <page>.access}、
+     * 业务写操作判 {@code <mod>.manage}（见 {@link PermissionCatalog}）。超管短路为全都有。
+     *
+     * <p>和 {@code requireAdmin()} 一样<b>不放在拦截器里判</b>：让"哪个接口要哪个权限"读控制器代码时就看得见。
+     */
+    public static CurrentUser requirePermission(String code) {
         CurrentUser user = HOLDER.get();
         if (user == null || user.id() == null) {
             throw BizException.of(ErrorCode.USER_NOT_LOGIN, "请先选择登录账号");
         }
-        if (!user.isAdmin()) {
-            throw BizException.of(ErrorCode.USER_FORBIDDEN, "只有管理员能管理账号");
+        if (!user.hasPermission(code)) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "当前角色没有该操作权限");
+        }
+        return user;
+    }
+
+    /**
+     * 要求当前登录人是超级管理员，否则 403。
+     *
+     * <p>这是<b>硬门禁、不进权限矩阵</b>：设置他人角色（提权/降权）与编辑权限矩阵本身，
+     * 只有超管能做，任何角色勾选都改不了这一条——否则普通管理员只要给自己勾上 {@code role.access}
+     * 就能自我提权，矩阵就失去意义。需求"仅超级管理员能改角色"落在这里。
+     */
+    public static CurrentUser requireSuperAdmin() {
+        CurrentUser user = HOLDER.get();
+        if (user == null || user.id() == null) {
+            throw BizException.of(ErrorCode.USER_NOT_LOGIN, "请先选择登录账号");
+        }
+        if (!user.isSuperAdmin()) {
+            throw BizException.of(ErrorCode.USER_FORBIDDEN, "只有超级管理员能做该操作");
         }
         return user;
     }

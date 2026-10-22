@@ -1,5 +1,7 @@
 package com.familyhome.recipe.biz.controller.b;
 
+import com.familyhome.common.auth.PermissionCatalog;
+import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.result.Result;
 import com.familyhome.recipe.api.dto.CreatePracticeGroupRequest;
 import com.familyhome.recipe.api.dto.PracticeGroupDTO;
@@ -40,6 +42,7 @@ public class RecipePracticeController {
      */
     @PostMapping
     public Result<Long> createGroup(@RequestBody @Valid CreatePracticeGroupRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         return Result.ok(practiceService.createGroup(request));
     }
 
@@ -48,6 +51,7 @@ public class RecipePracticeController {
      */
     @PutMapping("/{id}")
     public Result<Void> updateGroup(@PathVariable Long id, @RequestBody @Valid UpdatePracticeGroupRequest request) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         practiceService.updateGroup(id, request);
         return Result.ok();
     }
@@ -57,6 +61,7 @@ public class RecipePracticeController {
      */
     @DeleteMapping("/{id}")
     public Result<Void> deleteGroup(@PathVariable Long id) {
+        CurrentUserHolder.requirePermission(PermissionCatalog.ORDER_MANAGE);
         practiceService.deleteGroup(id);
         return Result.ok();
     }

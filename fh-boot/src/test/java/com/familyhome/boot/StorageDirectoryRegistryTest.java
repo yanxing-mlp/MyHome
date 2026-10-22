@@ -123,7 +123,7 @@ class StorageDirectoryRegistryTest {
         Path proposed = sandbox.resolve("unauthorized-new-root");
         Map<String, String> before = tree();
         if (!role.equals("anonymous")) {
-            CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(7L, "test-user", role));
+            CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(7L, "test-user", role, java.util.Set.of()));
         }
         // This one boundary test forbids even read-only Files calls; all other filesystem tests
         // below exercise the actual provider. Inputs are otherwise valid and writable.
@@ -1144,7 +1144,7 @@ class StorageDirectoryRegistryTest {
     @CsvSource({"anonymous,401", "MEMBER,403", "admin,403"})
     void foldersGetEnforcesRealRegistryAuthorizationBeforeAnyIo(String role, int httpStatus) throws Exception {
         if (!role.equals("anonymous")) {
-            CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(7L, "test-user", role));
+            CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(7L, "test-user", role, java.util.Set.of()));
         }
         var mvc = standaloneSetup(new StorageDirectoryController(registry)).setControllerAdvice(new GlobalExceptionHandler()).build();
         try (MockedStatic<Files> files = mockStatic(Files.class, invocation -> {
@@ -1263,7 +1263,8 @@ class StorageDirectoryRegistryTest {
     }
 
     private static void admin() {
-        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "test-admin", CurrentUserHolder.ROLE_ADMIN));
+        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "test-admin", CurrentUserHolder.ROLE_ADMIN,
+                java.util.Set.of(com.familyhome.common.auth.PermissionCatalog.STORAGE_ACCESS)));
     }
 
     private static void assertBadRequest(org.junit.jupiter.api.function.Executable action) {

@@ -65,6 +65,13 @@ public class ChangeLogService {
     private final String apiBase;
     private final int timeoutSeconds;
     private final long cacheMillis;
+    /**
+     * 「当前运行版本」的两仓 commit，由部署脚本在启动后端时注入环境变量
+     * {@code FH_RUNNING_COMMIT_SERVER} / {@code FH_RUNNING_COMMIT_WEB}（源码直跑下 = 各自 {@code git rev-parse HEAD}）。
+     * 源码直跑没有构建期烘焙快照，这两个环境变量才是运行版本的真值；拿不到（开发机 / 旧离线包）时回退快照顶部。
+     */
+    private final String runningCommitServer;
+    private final String runningCommitWeb;
 
     /** 上一次组装好的结果 + 组装时刻；volatile 足够（并发最坏是重复拉一次、last-write-wins，无正确性问题）。 */
     private volatile Cached cached;
@@ -76,12 +83,16 @@ public class ChangeLogService {
             @Value("${fh.change-log.github-enabled:true}") boolean githubEnabled,
             @Value("${fh.change-log.github-api-base:https://api.github.com}") String apiBase,
             @Value("${fh.change-log.timeout-seconds:8}") int timeoutSeconds,
-            @Value("${fh.change-log.cache-seconds:60}") int cacheSeconds) {
+            @Value("${fh.change-log.cache-seconds:60}") int cacheSeconds,
+            @Value("${fh.change-log.running-commit-server:}") String runningCommitServer,
+            @Value("${fh.change-log.running-commit-web:}") String runningCommitWeb) {
         this.objectMapper = objectMapper;
         this.githubEnabled = githubEnabled;
         this.apiBase = apiBase.endsWith("/") ? apiBase.substring(0, apiBase.length() - 1) : apiBase;
         this.timeoutSeconds = timeoutSeconds;
         this.cacheMillis = Math.max(0, cacheSeconds) * 1000L;
+        this.runningCommitServer = runningCommitServer == null ? "" : runningCommitServer.trim();
+        this.runningCommitWeb = runningCommitWeb == null ? "" : runningCommitWeb.trim();
         // followRedirects.NORMAL：GitHub API 一般不重定向，正常化即可；连接超时短、读超时按请求头 timeout。
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(timeoutSeconds))
@@ -133,9 +144,9 @@ public class ChangeLogService {
                 }
             }
             repoNode.put("source", source);
-            // 当前运行版本：始终取构建期快照顶部那条 commit（打包时的 HEAD，也就是这份产物编译自哪个 commit）。
-            // 与列表来源无关——无论本页是实时还是快照兜底，跑着的都是烘进 JAR 那一刻的 commit。
-            String runningCommit = runningCommitFromSnapshot(snapshot, spec);
+            // 当前运行版本：源码直跑优先取部署脚本注入的 git HEAD 环境变量，拿不到再回退构建期快照顶部。
+            // 与列表来源无关——无论本页是实时还是快照兜底，跑着的都是上次重启那一刻的 commit。
+            String runningCommit = runningCommitFor(spec, snapshot);
             if (runningCommit != null) {
                 repoNode.put("runningCommit", runningCommit);
             }
@@ -243,12 +254,28 @@ public class ChangeLogService {
     }
 
     /**
-     * 当前运行版本 = 构建期快照里本仓最新那条 commit 的完整 hash。
+     * 当前运行版本 = 本仓上次重启时编译/服务的那份代码的 commit。
      *
-     * <p>快照是打包前 {@code gen-change-log.py} 从两仓 HEAD 现采的，顶部第一条就是编译这份产物时的 HEAD，
-     * 也就是「系统当前跑的是哪个变更」的真值。它只依赖 classpath 里烘死的快照，**与本页列表是实时还是兜底无关**：
-     * 实时列表里可能有比它更新的提交（已 push 但没重新打包部署），那些都不算「运行中」。
-     * 拿不到（无快照 / 该仓无提交）就返回 null，前端不显示运行版本标记。
+     * <p><b>源码直跑（一键部署包）</b>：部署脚本启动后端时把两仓的 {@code git rev-parse HEAD} 通过环境变量
+     * {@code FH_RUNNING_COMMIT_SERVER} / {@code FH_RUNNING_COMMIT_WEB} 注入，那两个值就是运行版本真值
+     * （git pull 之后必须重启才会更新，正好对应「跑着的是哪份代码」）。
+     *
+     * <p><b>回退</b>：开发机 / 旧离线包没有这两个环境变量时，退回构建期快照顶部那条 commit（打包时的 HEAD）。
+     * 两者都拿不到返回 null，前端不显示运行版本标记，也不会误报「有新版本可部署」。
+     */
+    private String runningCommitFor(RepoSpec spec, JsonNode snapshot) {
+        String fromEnv = "server".equals(spec.key()) ? runningCommitServer : runningCommitWeb;
+        if (!fromEnv.isEmpty()) {
+            return fromEnv;
+        }
+        return runningCommitFromSnapshot(snapshot, spec);
+    }
+
+    /**
+     * 从构建期快照里取本仓最新那条 commit 的完整 hash（旧离线包 / 开发机的运行版本兜底）。
+     *
+     * <p>快照是打包前 {@code gen-change-log.py} 从两仓 HEAD 现采的，顶部第一条就是编译这份产物时的 HEAD。
+     * 拿不到（无快照 / 该仓无提交）就返回 null。
      */
     private String runningCommitFromSnapshot(JsonNode snapshot, RepoSpec spec) {
         if (snapshot == null) {

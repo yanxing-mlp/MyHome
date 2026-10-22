@@ -2,6 +2,7 @@ package com.familyhome.boot.controller.b;
 
 import com.fasterxml.jackson.databind.JsonNode;
 import com.familyhome.boot.service.ChangeLogService;
+import com.familyhome.common.auth.PermissionCatalog;
 import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.result.Result;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -17,8 +18,9 @@ import org.springframework.web.bind.annotation.RestController;
  * 响应里每仓带一个 {@code source}（live / snapshot / unavailable）、顶层带一个汇总 {@code source}，前端据此措辞。
  *
  * <p><b>为什么走后端而不是把 commit 直接塞进前端 bundle</b>：整份提交历史属于"敏感技术信息"，
- * 放进公开的 JS 里任何人都能扒出来。挂在 {@code /api/b} 下、每次 {@link CurrentUserHolder#requireAdmin()}，
- * 与账号管理 / 目录管理同一道门槛——菜单只对 ADMIN 露出只是体验，绕开 UI 直接敲接口照样 403。
+ * 放进公开的 JS 里任何人都能扒出来。挂在 {@code /api/b} 下、每次 {@link CurrentUserHolder#requirePermission(String)}
+ * 判 {@code changelog.access}，与账号管理 / 目录管理同一类门槛——菜单只对有权限的角色露出只是体验，
+ * 绕开 UI 直接敲接口照样 403。
  */
 @RestController
 @RequestMapping("/api/b")
@@ -32,7 +34,7 @@ public class ChangeLogController {
 
     @GetMapping("/change-log")
     public Result<JsonNode> changeLog() {
-        CurrentUserHolder.requireAdmin();
+        CurrentUserHolder.requirePermission(PermissionCatalog.CHANGELOG_ACCESS);
         return Result.ok(changeLogService.getChangeLog());
     }
 }

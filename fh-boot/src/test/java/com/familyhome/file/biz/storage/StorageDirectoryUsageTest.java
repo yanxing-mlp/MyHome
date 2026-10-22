@@ -541,7 +541,8 @@ class StorageDirectoryUsageTest {
         StorageDirectoryRegistry registry = new StorageDirectoryRegistry(jdbc,
                 mock(PlatformTransactionManager.class), "unused", usage);
         var mvc = MockMvcBuilders.standaloneSetup(new StorageDirectoryController(registry)).build();
-        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "admin", CurrentUserHolder.ROLE_ADMIN));
+        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "admin", CurrentUserHolder.ROLE_ADMIN,
+                java.util.Set.of(com.familyhome.common.auth.PermissionCatalog.STORAGE_ACCESS)));
         mvc.perform(get("/api/b/storage"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.directories[0].directoryBytes").doesNotExist())
@@ -554,7 +555,8 @@ class StorageDirectoryUsageTest {
         clearInvocations(jdbc);
         executor.runNext();
         verifyNoInteractions(jdbc);
-        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "admin", CurrentUserHolder.ROLE_ADMIN));
+        CurrentUserHolder.set(new CurrentUserHolder.CurrentUser(1L, "admin", CurrentUserHolder.ROLE_ADMIN,
+                java.util.Set.of(com.familyhome.common.auth.PermissionCatalog.STORAGE_ACCESS)));
         mvc.perform(get("/api/b/storage"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.directories[0].directoryBytes").value(17))

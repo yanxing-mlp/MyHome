@@ -23,6 +23,7 @@ spring:
     #   recipe -> V3xx
     #   vault  -> V4xx
     #   user   -> V5xx
+    #   system -> V6xx（跨域运维/审计，fh-boot 直接持有：操作记录 operation_log 等）
     # 这样各域独立加迁移不会撞版本号，将来按域拆库时直接整目录搬走。
     # 注意：**已应用的迁移文件不能再改**，改了 checksum 会让 validate-on-migrate 直接启动失败
     # （给已上线的表加列只能新开一条，见 album/V201__add_album_image_pinned.sql）。
@@ -32,6 +33,7 @@ spring:
       - classpath:db/migration/recipe
       - classpath:db/migration/vault
       - classpath:db/migration/user
+      - classpath:db/migration/system
     # 【号段方案的必要配套】out-of-order 必须为 true，否则号段设计直接跑不起来。
     # 实测踩到：库里已应用 100/200/300/301，album 域新开一条 V201 时 Flyway 报
     #   "Detected resolved migration not applied to database: 201. To allow executing
@@ -67,6 +69,16 @@ server:
   port: 8080
   shutdown: graceful
 
+# 日志格式（v46）：只覆盖「级别」这一段的模式，把 traceId 注入进去。
+# Spring Boot 默认的控制台/文件 pattern 在级别位置用的是 ${LOG_LEVEL_PATTERN:-%5p}，
+# 所以只改 logging.pattern.level 就能让控制台与文件两条 appender 的每一行都带上 [traceId]，
+# 无需重写整条 pattern（各 profile 的 logging.level.* 与此互不影响，会一并生效）。
+# traceId 由 TraceIdFilter 每请求写进 MDC；非请求线程（启动、@Scheduled）MDC 里没有它，
+# 模式里的 `:-` 兜底成空——日志照常打，只是方括号内为空。系统日志页据此按 traceId 过滤出一次操作的关联日志。
+logging:
+  pattern:
+    level: "%5p [%X{traceId:-}]"
+
 # 文件存储（方案 §6.1）。一期只有 LocalStorageClient 一个实现，
 # 刻意不做 fh.storage.type 开关 —— 只有一个实现时那是死代码。
 fh:
@@ -98,3 +110,51 @@ fh:
     timeout-seconds: 8
     # 两仓都是公开库，匿名拉取受 GitHub 60 次/小时/IP 限制，靠短缓存挡住高频刷新。
     cache-seconds: 60
+    # 「当前运行版本」= 本仓上次重启时那份代码的 commit。源码直跑（一键部署包）下由部署脚本启动后端时
+    # 注入 FH_RUNNING_COMMIT_SERVER / FH_RUNNING_COMMIT_WEB（各自 git rev-parse HEAD）；开发机 / 旧离线包
+    # 没有这两个环境变量时留空，ChangeLogService 回退到构建期烘焙快照顶部。
+    running-commit-server: ${FH_RUNNING_COMMIT_SERVER:}
+    running-commit-web: ${FH_RUNNING_COMMIT_WEB:}
+
+  # 「部署最新」（部署管理页在线更新入口）。源码直跑下，点一下就让部署脚本 git pull 两仓 + 重启前后端。
+  # 后端只做两件事：分离式拉起 launcher（不把部署进程挂在自己的进程树上，否则重启时被 taskkill /T 连带杀掉）、
+  # 读 launcher 写出的进度文件回吐给前端。这些值都由部署脚本启动后端时注入环境变量；开发机留空即视为
+  # 「当前环境未接入一键部署」，前端不显示入口、后端触发接口直接报 DEPLOY_NOT_AVAILABLE。
+  deploy:
+    launcher: ${FH_DEPLOY_LAUNCHER:}
+    progress-file: ${FH_DEPLOY_PROGRESS_FILE:}
+    # 部署历史：部署脚本每次跑到终态（done/failed）就把这一条追加进这个 JSON 数组文件（新在前、上限 50）。
+    # 后端只读不写——写的人是能活过后端之死的分离部署进程，后端自己触发的那次根本等不到结束。
+    # 留空即视为未接入，历史接口直接返回空数组（不是报错：没有历史和无历史文件是一回事）。
+    history-file: ${FH_DEPLOY_HISTORY_FILE:}
+
+  # 「知识库」（系统后台菜单，方案 v49）。在线浏览/编辑一个已有 git 工作副本里的文本文件，并一键推送到远端。
+  # repo-dir 指向该仓库在本机的目录（部署机上通常是 MyHome--Knowledge 的 clone）。留空即视为「当前环境未接入
+  # 知识库」：文件树接口回 available=false，前端显示空态（与系统日志页 dev 空态同一手法），读/写/推送接口 400 拒绝。
+  # git-ssh-command 可选：远端是 SSH 地址且需要指定私钥时注入 GIT_SSH_COMMAND（个人 GitHub 走独立 key），留空用 git 默认凭据链。
+  knowledge:
+    repo-dir: ${FH_KNOWLEDGE_REPO_DIR:}
+    git-ssh-command: ${FH_KNOWLEDGE_GIT_SSH_COMMAND:}
+
+  # 「代码仓库」（系统后台菜单，方案 v51）：在线浏览/编辑后端(server)与前端(web)源码 git 工作副本里的文本文件，
+  # 并一键推送到远端。与知识库同一套引擎、同一口径，只是这里有两个仓库、各自独立配置目录与独立权限码门禁
+  # （server-repo.access / web-repo.access）。部署机上 server.dir 通常指向 MyHome 的 clone、web.dir 指向
+  # MyHome-React 的 clone；任一留空即视为「当前环境未接入该仓库」：文件树回 available=false、前端空态，
+  # 读/写/推送 400 拒绝。git-ssh-command 可选：远端是 SSH 地址且需指定私钥时注入 GIT_SSH_COMMAND（个人 GitHub 走独立 key）。
+  repo:
+    server:
+      dir: ${FH_SERVER_REPO_DIR:}
+      git-ssh-command: ${FH_SERVER_REPO_GIT_SSH_COMMAND:}
+    web:
+      dir: ${FH_WEB_REPO_DIR:}
+      git-ssh-command: ${FH_WEB_REPO_GIT_SSH_COMMAND:}
+
+  # 「数据库」（系统后台菜单，方案 v52）：可视化浏览表 / 行内增删查改 / 结构化改表结构 / 跑任意 SQL / 每日备份。
+  # 备份目录不单独配——它锚定在后端自身日志文件 logging.file.name 的「祖父目录 / backups」（即 logs 的同级目录），
+  # 与 LogService 锚定日志目录同一手法：部署脚本已注入 LOGGING_FILE_NAME=<install>/logs/server.log，故备份自动落到
+  # <install>/backups，无需再配一个目录。开发机没有 logging.file.name → 备份目录为 null → 备份能力优雅退化（available=false）。
+  # mysqldump-path 可选：部署机上 mysqldump 通常不在 PATH（Windows 在 <mysql>/bin），由脚本注入绝对路径；留空则按 PATH 找
+  # mysqldump（开发机 brew、unix 系统包都在 PATH）。找不到 mysqldump 或没有备份目录时，「立即备份 / 每日备份」不可用，其余
+  # 浏览/改数据/改结构/跑 SQL 能力照常（它们走后端自己的 JDBC 连接，不依赖 mysqldump）。
+  database:
+    mysqldump-path: ${FH_MYSQLDUMP_PATH:}

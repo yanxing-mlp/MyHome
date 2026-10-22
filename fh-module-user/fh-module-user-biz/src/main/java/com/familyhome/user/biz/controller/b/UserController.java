@@ -108,9 +108,9 @@ public class UserController {
     }
 
     /**
-     * 设置某个人的角色（ADMIN / MEMBER）。<b>管理员替别人写东西的口子只有这一条，且只写 {@code role} 一列</b>：
-     * 昵称/手机号/口令/头像仍然只有本人能在上面那三条 {@code /profile*} 里改（头像建号时管理员先定一张，之后本人自己换）。
-     * 后端挡住"改自己"和"降掉最后一个管理员"（{@code AppUserService#updateRole}）。
+     * 设置某个人的角色（SUPER_ADMIN / ADMIN / MEMBER）。<b>替别人写东西的口子只有这一条，且只写 {@code role} 一列</b>：
+     * 昵称/手机号/口令/头像仍然只有本人能在上面那三条 {@code /profile*} 里改（头像建号时先定一张，之后本人自己换）。
+     * <b>只有超管能改角色</b>，后端还挡住"改自己"和"降掉最后一个超管"（{@code AppUserService#updateRole}）。
      */
     @PutMapping("/{id}/role")
     public Result<Void> updateRole(@PathVariable Long id, @Valid @RequestBody UserRoleUpdateRequest request) {

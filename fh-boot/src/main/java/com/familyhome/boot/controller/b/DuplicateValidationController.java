@@ -1,6 +1,7 @@
 package com.familyhome.boot.controller.b;
 
 import com.familyhome.album.biz.service.AlbumPartition;
+import com.familyhome.common.auth.PermissionCatalog;
 import com.familyhome.common.context.CurrentUserHolder;
 import com.familyhome.common.context.DataPartition;
 import com.familyhome.common.enums.AlbumScope;
@@ -55,10 +56,10 @@ public class DuplicateValidationController {
     @Transactional(readOnly = true)
     public Result<Boolean> duplicate(@Valid @RequestBody DuplicateRequest request) {
         Long currentId = CurrentUserHolder.requireUserId();
-        // 对齐账号写入口：新建只允许管理员，个人资料只能排除自己。
+        // 对齐账号写入口：新建账号要有 user.access 权限，个人资料只能排除自己。
         if (request.kind() == Kind.USER_NAME || request.kind() == Kind.USER_PHONE) {
             if (request.excludeId() == null) {
-                CurrentUserHolder.requireAdmin();
+                CurrentUserHolder.requirePermission(PermissionCatalog.USER_ACCESS);
             } else if (!currentId.equals(request.excludeId())) {
                 throw BizException.of(ErrorCode.USER_FORBIDDEN, "只能校验自己的个人资料");
             }

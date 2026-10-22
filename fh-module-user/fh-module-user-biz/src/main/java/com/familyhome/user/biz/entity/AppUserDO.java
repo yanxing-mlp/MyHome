@@ -46,7 +46,7 @@ public class AppUserDO {
     /** 头像，指向 {@code file_object.id}（biz_type = USER_AVATAR）。null = 用前端默认头像 */
     private Long avatarFileId;
 
-    /** ADMIN / MEMBER，口径见 {@code CurrentUserHolder} 的常量 */
+    /** SUPER_ADMIN / ADMIN / MEMBER，口径见 {@code CurrentUserHolder} 的常量 */
     private String role;
 
     // 刻意没有 creator_id：需求点名的"添加人"是订单/图片/分组/菜品/分类/文件/密码本那几处业务数据，
